@@ -1,0 +1,38 @@
+site_id,name,state,lat,lon,agro_zone,soil_type,crops,n_crops
+HP-SML,Shimla,Himachal Pradesh,31.1048,77.1734,Western Himalayan,Brown hill soil,Apple|Cherry_(including_sour)|Peach|Raspberry,4
+HP-KUL,Kullu,Himachal Pradesh,31.9576,77.1093,Western Himalayan,Brown hill soil,Apple|Cherry_(including_sour)|Raspberry,3
+HP-KNR,Reckong Peo (Kinnaur),Himachal Pradesh,31.5386,78.2732,Western Himalayan,Skeletal mountain soil,Apple|Raspberry,2
+JK-SGR,Srinagar,Jammu & Kashmir,34.0837,74.7973,Western Himalayan,Karewa alluvium,Apple|Cherry_(including_sour)|Peach,3
+JK-BRM,Baramulla,Jammu & Kashmir,34.209,74.342,Western Himalayan,Karewa alluvium,Apple|Cherry_(including_sour),2
+JK-ANT,Anantnag,Jammu & Kashmir,33.7311,75.1487,Western Himalayan,Karewa alluvium,Apple|Cherry_(including_sour),2
+HP-SOL,Solan,Himachal Pradesh,30.9045,77.0967,Western Himalayan,Brown hill soil,"Peach|Pepper,_bell|Strawberry|Tomato",4
+UK-DDN,Dehradun,Uttarakhand,30.3165,78.0322,Western Himalayan,Doon gravel loam,Peach|Strawberry|Tomato,3
+UK-NTL,Nainital,Uttarakhand,29.3803,79.4636,Western Himalayan,Brown forest soil,Strawberry|Raspberry|Apple,3
+HP-MNL,Manali,Himachal Pradesh,32.2396,77.1887,Western Himalayan,Brown hill soil,Apple|Raspberry|Cherry_(including_sour),3
+MH-NSK,Nashik,Maharashtra,19.9975,73.7898,Western Plateau & Hills,Medium black soil,Grape|Tomato|Squash,3
+MH-SNG,Sangli,Maharashtra,16.8524,74.5815,Western Plateau & Hills,Deep black soil,Grape|Tomato,2
+MH-SLP,Solapur,Maharashtra,17.6599,75.9064,Western Plateau & Hills,Deep black soil,Grape|Squash,2
+KA-VJP,Vijayapura (Bijapur),Karnataka,16.8302,75.71,Southern Plateau & Hills,Deep black soil,Grape|Corn_(maize),2
+MH-MHB,Mahabaleshwar,Maharashtra,17.9307,73.6477,Western Plateau & Hills,Lateritic hill soil,Strawberry|Raspberry,2
+MH-NGP,Nagpur,Maharashtra,21.1458,79.0882,Western Plateau & Hills,Medium black soil,Orange|Soybean|Corn_(maize),3
+MH-AMR,Amravati,Maharashtra,20.932,77.7523,Western Plateau & Hills,Medium black soil,Orange|Soybean,2
+UP-AGR,Agra,Uttar Pradesh,27.1767,78.0081,Upper Gangetic Plains,Alluvial soil,"Potato|Tomato|Squash|Pepper,_bell",4
+UP-FRK,Farrukhabad,Uttar Pradesh,27.3929,79.58,Upper Gangetic Plains,Alluvial soil,Potato|Squash,2
+PB-JLD,Jalandhar,Punjab,31.326,75.5762,Trans-Gangetic Plains,Alluvial soil,Potato|Corn_(maize)|Tomato,3
+WB-HGL,Hooghly,West Bengal,22.8994,88.3903,Lower Gangetic Plains,Alluvial soil,Potato|Squash|Tomato,3
+UP-LKO,Lucknow,Uttar Pradesh,26.8467,80.9462,Upper Gangetic Plains,Alluvial soil,"Squash|Tomato|Pepper,_bell",3
+UP-VNS,Varanasi,Uttar Pradesh,25.3176,82.9739,Middle Gangetic Plains,Alluvial soil,"Squash|Pepper,_bell|Tomato",3
+BR-PTN,Patna,Bihar,25.5941,85.1376,Middle Gangetic Plains,Calcareous alluvial,Squash|Potato|Corn_(maize),3
+MP-IND,Indore,Madhya Pradesh,22.7196,75.8577,Central Plateau & Hills,Medium black soil,Soybean|Potato|Corn_(maize),3
+MP-UJN,Ujjain,Madhya Pradesh,23.1793,75.7849,Central Plateau & Hills,Medium black soil,Soybean|Corn_(maize),2
+MH-LTR,Latur,Maharashtra,18.4088,76.5604,Western Plateau & Hills,Deep black soil,Soybean|Grape,2
+RJ-KOT,Kota,Rajasthan,25.2138,75.8648,Western Dry Region,Alluvial-black mixed,Soybean|Corn_(maize),2
+MP-CHW,Chhindwara,Madhya Pradesh,22.0574,78.9382,Central Plateau & Hills,Medium black soil,Corn_(maize)|Soybean,2
+KA-KLR,Kolar,Karnataka,13.1362,78.1291,Southern Plateau & Hills,Red loamy soil,"Tomato|Pepper,_bell|Corn_(maize)",3
+AP-MDP,Madanapalle,Andhra Pradesh,13.5503,78.5029,Southern Plateau & Hills,Red loamy soil,"Tomato|Pepper,_bell",2
+KA-DVG,Davangere,Karnataka,14.4644,75.9218,Southern Plateau & Hills,Red sandy loam,Corn_(maize)|Tomato,2
+TS-NZB,Nizamabad,Telangana,18.6725,78.0941,Southern Plateau & Hills,Red sandy loam,Corn_(maize)|Soybean,2
+TS-KRM,Karimnagar,Telangana,18.4386,79.1288,Southern Plateau & Hills,Red sandy loam,Corn_(maize),1
+TN-OOT,Udhagamandalam (Ooty),Tamil Nadu,11.4102,76.695,Southern Plateau & Hills,Lateritic hill soil,Blueberry|Potato|Strawberry,3
+KL-MNR,Munnar,Kerala,10.0889,77.0595,West Coast Plains & Ghats,Lateritic hill soil,Blueberry|Strawberry,2
+KA-CKM,Chikkamagaluru,Karnataka,13.3161,75.772,Southern Plateau & Hills,Lateritic red soil,"Blueberry|Orange|Pepper,_bell",3

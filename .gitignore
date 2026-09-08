@@ -1,0 +1,52 @@
+# ---------------------------------------------------------------------------
+# Large regenerable data. Everything ignored here is reproducible by running
+# the pipeline; nothing here is a source artefact.
+# ---------------------------------------------------------------------------
+
+# PlantVillage: 2.2 GB archive + ~2.5 GB of extracted JPEGs.
+# Re-download with scripts/01_build_dataset.py (see README).
+data/raw/
+
+# Cached frozen embeddings, ~500 MB. Regenerate: scripts/02_extract_features.py
+data/processed/emb_*.npy
+
+# Derived tables. Regenerate: scripts/01_build_dataset.py
+data/processed/*.parquet
+data/interim/
+
+# NOTE: data/climate/ is deliberately NOT ignored. It is 37 small CSVs of
+# Open-Meteo archive data (a few MB total) and committing it makes the whole
+# project reproducible offline, without hitting a rate-limited API.
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+outputs/logs/
+outputs/checkpoints/*.pt
+!outputs/checkpoints/.gitkeep
+
+# Keep reports and figures: they are the results others need to read.
+# outputs/reports/  -> committed
+# outputs/figures/  -> committed
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+
+# ---------------------------------------------------------------------------
+# Editors / OS
+# ---------------------------------------------------------------------------
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store

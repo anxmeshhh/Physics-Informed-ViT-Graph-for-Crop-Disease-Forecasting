@@ -1,0 +1,111 @@
+# ============================================================================
+# Vision Transformer with Physics-Informed Graph Learning
+# for Climate-Adaptive Crop Disease Forecasting
+# ----------------------------------------------------------------------------
+# Single source of truth for every pipeline stage. Stage scripts read this
+# file; anything a team member needs to tune lives here, not in the code.
+# ============================================================================
+
+project:
+  name: cropforecast
+  seed: 42
+
+paths:
+  raw_images:   data/raw/raw/color      # PlantVillage colour images (38 classes)
+  splits:       data/raw/splits         # official color_train.txt / color_test.txt
+  leaf_map:     data/raw/leaf_grouping/leaf-map.json
+  interim:      data/interim
+  processed:    data/processed
+  climate:      data/climate
+  checkpoints:  outputs/checkpoints
+  figures:      outputs/figures
+  reports:      outputs/reports
+
+# --- Block 1: Input layer --------------------------------------------------
+data:
+  # Images are assigned to a (farm, date) so that climate + graph layers exist.
+  # Assignment is seeded and deterministic -> fully reproducible.
+  study_years: [2021, 2022, 2023]
+  season_window_days: 120     # length of the growing-season sampling window
+  max_images_per_class: null  # null = use all; set an int for a fast smoke run
+
+# --- Block 2a: Vision backbones -------------------------------------------
+backbones:
+  # Every backbone exposes the same interface, so the benchmark is apples-to-apples.
+  dinov2:  { hf_id: "facebook/dinov2-small",              image_size: 224, dim: 384 }
+  vit:     { hf_id: "google/vit-base-patch16-224-in21k",  image_size: 224, dim: 768 }
+  swin:    { hf_id: "microsoft/swin-tiny-patch4-window7-224", image_size: 224, dim: 768 }
+  deit:    { hf_id: "facebook/deit-small-patch16-224",    image_size: 224, dim: 384 }
+  primary: dinov2             # backbone used by the full pipeline (per architecture diagram)
+  frozen:  true               # architecture diagram specifies a FROZEN vision backbone
+  batch_size: 64
+  num_workers: 0              # Windows-safe default
+
+# --- Block 2b: Climate feature engineering --------------------------------
+climate:
+  provider: open-meteo
+  archive_url: "https://archive-api.open-meteo.com/v1/archive"
+  daily_vars:
+    - temperature_2m_mean
+    - temperature_2m_max
+    - temperature_2m_min
+    - relative_humidity_2m_mean
+    - relative_humidity_2m_max
+    - precipitation_sum
+    - rain_sum
+    - wind_speed_10m_max
+    - wind_direction_10m_dominant
+    - shortwave_radiation_sum
+    - et0_fao_evapotranspiration
+    - surface_pressure_mean
+    - dew_point_2m_mean
+  lookback_days: 30           # history pulled before each observation date
+  rolling_windows: [3, 7, 14] # temporal aggregation windows
+
+# --- Block 2c: Graph construction -----------------------------------------
+graph:
+  k_neighbours: 8             # KNN component
+  radius_km: 350.0           # India production belts are far apart; calibrated for connectivity
+  wind_aware: true            # add directed downwind edges (spore transport)
+  wind_alignment_threshold: 0.5   # cos(angle) above which an edge is "downwind"
+  max_edges_per_node: 16
+  time_window_days: 7         # temporal half-window for space-time edges
+  min_neighbours: 3           # KNN fallback so no farm is ever isolated
+  same_crop: true             # disease does not spread between different crops
+
+# --- Blocks 3-4: Fusion + GNN ---------------------------------------------
+model:
+  fusion:
+    hidden_dim: 256
+    dropout: 0.2
+  gnn:
+    conv: sage                # sage | gcn | gat
+    hidden_dim: 256
+    num_layers: 2             # 2 hops; 3 over-smooths (validated in stage 8 sweep)
+    heads: 4                  # GAT only
+    dropout: 0.3
+  heads:
+    num_classes: 38
+    horizons: [1, 3, 5, 7]    # multi-horizon forecast, in days
+    risk_levels: 3            # low / medium / high
+
+# --- Block 5: Physics-informed loss ---------------------------------------
+physics:
+  lambda_physics: 0.3         # total physics weight (lambda in the architecture diagram)
+  weights:
+    infection_pressure: 1.0   # risk must rise with favourable infection conditions
+    diffusion: 0.5            # risk varies smoothly across connected farms
+    monotonic_horizon: 0.3    # uncertainty must not shrink with a longer horizon
+    dry_suppression: 0.5      # dry + hot conditions must suppress fungal risk
+
+training:
+  epochs: 800                 # full-batch graph training; ~0.2s per epoch
+  lr: 3.0e-4
+  weight_decay: 1.0e-4
+  batch_size: 64
+  early_stopping_patience: 7
+  amp: true                   # mixed precision (6 GB VRAM friendly)
+
+serve:
+  host: "127.0.0.1"
+  port: 8000

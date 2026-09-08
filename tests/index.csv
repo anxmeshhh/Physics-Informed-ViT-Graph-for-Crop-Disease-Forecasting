@@ -1,0 +1,24 @@
+file,true_class,crop,confidence,suggested_site_id,suggested_farm,suggested_date
+01_tomato_late_blight.JPG,Tomato___Late_blight,Tomato,0.9638,KA-KLR,"Kolar, Karnataka",2023-07-15
+02_tomato_early_blight.JPG,Tomato___Early_blight,Tomato,0.9329,KA-KLR,"Kolar, Karnataka",2023-07-15
+03_tomato_spider_mites_two-spotted_spider_mite.JPG,Tomato___Spider_mites Two-spotted_spider_mite,Tomato,0.95,KA-KLR,"Kolar, Karnataka",2023-07-15
+04_tomato_tomato_yellow_leaf_curl_virus.JPG,Tomato___Tomato_Yellow_Leaf_Curl_Virus,Tomato,0.9793,KA-KLR,"Kolar, Karnataka",2023-07-15
+05_tomato_septoria_leaf_spot.JPG,Tomato___Septoria_leaf_spot,Tomato,0.9625,KA-KLR,"Kolar, Karnataka",2023-07-15
+06_tomato_healthy.JPG,Tomato___healthy,Tomato,0.9625,KA-KLR,"Kolar, Karnataka",2023-07-15
+07_potato_late_blight.JPG,Potato___Late_blight,Potato,0.9448,UP-AGR,"Agra, Uttar Pradesh",2023-11-20
+08_potato_early_blight.JPG,Potato___Early_blight,Potato,0.9687,UP-AGR,"Agra, Uttar Pradesh",2023-11-20
+09_potato_healthy.JPG,Potato___healthy,Potato,0.606,UP-AGR,"Agra, Uttar Pradesh",2023-11-20
+10_apple_apple_scab.JPG,Apple___Apple_scab,Apple,0.8633,HP-SML,"Shimla, Himachal Pradesh",2023-06-15
+11_apple_black_rot.JPG,Apple___Black_rot,Apple,0.8609,HP-SML,"Shimla, Himachal Pradesh",2023-06-15
+12_apple_cedar_apple_rust.JPG,Apple___Cedar_apple_rust,Apple,0.5523,HP-SML,"Shimla, Himachal Pradesh",2023-06-15
+13_apple_healthy.JPG,Apple___healthy,Apple,0.9562,HP-SML,"Shimla, Himachal Pradesh",2023-06-15
+14_grape_black_rot.JPG,Grape___Black_rot,Grape,0.9122,MH-NSK,"Nashik, Maharashtra",2023-11-10
+15_grape_esca_black_measles.JPG,Grape___Esca_(Black_Measles),Grape,0.9215,MH-NSK,"Nashik, Maharashtra",2023-11-10
+16_corn_maize_common_rust.JPG,Corn_(maize)___Common_rust_,Corn_(maize),0.9623,KA-DVG,"Davangere, Karnataka",2023-08-10
+17_corn_maize_northern_leaf_blight.JPG,Corn_(maize)___Northern_Leaf_Blight,Corn_(maize),0.6852,KA-DVG,"Davangere, Karnataka",2023-08-10
+18_squash_powdery_mildew.JPG,Squash___Powdery_mildew,Squash,0.9419,UP-LKO,"Lucknow, Uttar Pradesh",2023-07-20
+19_peach_bacterial_spot.JPG,Peach___Bacterial_spot,Peach,0.972,HP-SOL,"Solan, Himachal Pradesh",2023-04-15
+20_strawberry_leaf_scorch.JPG,Strawberry___Leaf_scorch,Strawberry,0.9659,MH-MHB,"Mahabaleshwar, Maharashtra",2023-01-15
+21_orange_haunglongbing_citrus_greening.JPG,Orange___Haunglongbing_(Citrus_greening),Orange,0.9655,MH-NGP,"Nagpur, Maharashtra",2023-09-10
+22_pepper_bell_bacterial_spot.JPG,"Pepper,_bell___Bacterial_spot","Pepper,_bell",0.9291,KA-KLR,"Kolar, Karnataka",2023-09-05
+23_cherry_including_sour_powdery_mildew.JPG,Cherry_(including_sour)___Powdery_mildew,Cherry_(including_sour),0.6047,JK-SGR,"Srinagar, Jammu & Kashmir",2023-05-20

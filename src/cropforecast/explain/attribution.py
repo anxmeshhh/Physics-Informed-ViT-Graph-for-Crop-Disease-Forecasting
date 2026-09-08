@@ -33,7 +33,7 @@ class _ClimateOnly(torch.nn.Module):
     """
 
     def __init__(self, model, vision, meta, edge_index=None, edge_attr=None,
-                 target: str = "risk", horizon: int = 0):
+                 target: str = "risk", horizon: int = 0, keepdim: bool = False):
         super().__init__()
         self.model = model
         self.register_buffer("vision", vision.detach())
@@ -48,6 +48,9 @@ class _ClimateOnly(torch.nn.Module):
         self.edge_attr = edge_attr
         self.target = target
         self.horizon = horizon
+        # SHAP's GradientExplainer indexes the model output as 2-D; Captum's IG
+        # wants the scalar-per-sample form. One flag serves both.
+        self.keepdim = keepdim
 
     def forward(self, climate: torch.Tensor) -> torch.Tensor:
         # Attribution perturbs a batch of arbitrary size; broadcast the pinned
@@ -60,7 +63,8 @@ class _ClimateOnly(torch.nn.Module):
 
         out = self.model(vision, climate, meta, self.edge_index, self.edge_attr)
         if self.target == "risk":
-            return out["risk"][:, self.horizon]
+            h = self.horizon
+            return out["risk"][:, h:h + 1] if self.keepdim else out["risk"][:, h]
         return out["class_logits"]
 
 
@@ -120,7 +124,8 @@ def shap_climate(
     import shap
 
     wrapper = _ClimateOnly(model, vision[:n_background], meta[:n_background],
-                           None, None, target="risk", horizon=horizon).eval()
+                           None, None, target="risk", horizon=horizon,
+                           keepdim=True).eval()
 
     background = climate[:n_background]
     explain = climate[:min(n_explain, len(climate))]

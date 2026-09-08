@@ -31,20 +31,34 @@ def _grid_shape(n_patches: int) -> tuple[int, int]:
     return side, side
 
 
-def _to_heatmap(grid: torch.Tensor, out_hw: tuple[int, int]) -> np.ndarray:
-    """Upsample a patch-grid map to image size and normalise to [0, 1]."""
+def _to_heatmap(grid: torch.Tensor, out_hw: tuple[int, int],
+                lo_q: float = 0.02, hi_q: float = 0.98) -> np.ndarray:
+    """Upsample a patch-grid map to image size and normalise to [0, 1].
+
+    Normalisation is done between robust quantiles rather than min and max.
+    DINOv2 (and ViTs generally) emit a handful of very high-norm "artifact"
+    patch tokens that carry global information rather than local content. Under
+    plain min-max scaling one such token saturates the map and every genuinely
+    informative region collapses to zero - which renders as a flat, empty
+    heatmap. Clipping the tails first keeps those outliers from dominating.
+    """
     m = grid[None, None].float()
-    m = F.interpolate(m, size=out_hw, mode="bilinear", align_corners=False)
-    m = m[0, 0]
-    m = m - m.min()
-    return (m / (m.max() + 1e-8)).detach().cpu().numpy()
+    m = F.interpolate(m, size=out_hw, mode="bilinear", align_corners=False)[0, 0]
+
+    flat = m.flatten()
+    lo = torch.quantile(flat, lo_q)
+    hi = torch.quantile(flat, hi_q)
+    if float(hi - lo) < 1e-8:            # degenerate map: nothing to show
+        lo, hi = flat.min(), flat.max()
+    m = ((m - lo) / (hi - lo + 1e-8)).clamp(0.0, 1.0)
+    return m.detach().cpu().numpy()
 
 
 @torch.no_grad()
 def attention_rollout(
     backbone,
     pixel_values: torch.Tensor,
-    discard_ratio: float = 0.85,
+    discard_ratio: float = 0.55,
     head_fusion: str = "mean",
 ) -> np.ndarray:
     """CLS attention rollout for one image, as an HxW heatmap in [0, 1]."""
@@ -98,35 +112,56 @@ def grad_cam(
     backbone.zero_grad(set_to_none=True)
     head.zero_grad(set_to_none=True)
 
-    # The frozen backbone still needs to build a graph for this input.
-    for p in backbone.parameters():
-        p.requires_grad_(False)
+    # Every backbone parameter is frozen, so if the *input* does not require
+    # gradient either, autograd builds no graph at all and `retain_grad` raises.
+    # Making the pixels require grad is enough to get gradients flowing back to
+    # the patch tokens, which is all Grad-CAM needs - and it leaves the frozen
+    # weights untouched.
+    pixel_values = pixel_values.clone().detach().requires_grad_(True)
 
-    activations: dict[str, torch.Tensor] = {}
+    with torch.enable_grad():
+        out = backbone.model(pixel_values=pixel_values, output_hidden_states=True)
 
-    out = backbone.model(pixel_values=pixel_values)
-    tokens = out.last_hidden_state          # (1, N, D)
-    tokens.retain_grad()
-    activations["tokens"] = tokens
+        # Hook the PENULTIMATE block, not the final hidden state. A CLS-pooled
+        # model reads only token 0 downstream, so the gradient of the logit with
+        # respect to the *final* layer's patch tokens is identically zero and the
+        # CAM comes out perfectly flat. One block earlier, the patch tokens still
+        # reach the CLS token through the last attention layer, so they carry
+        # real gradient.
+        hidden = out.hidden_states
+        target_layer = hidden[-2] if len(hidden) >= 2 else out.last_hidden_state
+        target_layer.retain_grad()
 
-    pooled = tokens[:, 0] if backbone.spec.pool == "cls" else tokens.mean(1)
-    logits = head(pooled)
-    if target_class is None:
-        target_class = int(logits.argmax(dim=-1).item())
+        final = out.last_hidden_state
+        pooled = final[:, 0] if backbone.spec.pool == "cls" else final.mean(1)
+        logits = head(pooled)
+        if target_class is None:
+            target_class = int(logits.argmax(dim=-1).item())
 
-    logits[0, target_class].backward()
+        logits[0, target_class].backward()
 
-    grads = tokens.grad                      # (1, N, D)
+    grads = target_layer.grad                # (1, N, D)
     if grads is None:
         raise RuntimeError("No gradient reached the patch tokens")
 
+    tokens = target_layer
     patch_tokens = tokens[0, 1:] if backbone.spec.pool == "cls" else tokens[0]
     patch_grads = grads[0, 1:] if backbone.spec.pool == "cls" else grads[0]
 
-    # Channel weights are the mean gradient; CAM is the positive part of the
+    # Channel weights are the mean gradient over patches; the CAM is the
     # weighted activation sum.
     weights = patch_grads.mean(dim=0, keepdim=True)          # (1, D)
-    cam = F.relu((patch_tokens * weights).sum(dim=-1))       # (P,)
+    signed = (patch_tokens * weights).sum(dim=-1)            # (P,)
+
+    # Transformer token activations are not rectified the way CNN feature maps
+    # are, so the weighted sum is frequently negative everywhere. Applying a
+    # plain ReLU then yields an all-zero map that normalises to a flat image -
+    # which is exactly what a blank Grad-CAM panel means. Keep the positive part
+    # when there is one, and otherwise fall back to magnitude, which still shows
+    # where the prediction was sensitive.
+    cam = F.relu(signed)
+    if float(cam.max()) <= 1e-12:
+        cam = signed.abs()
 
     h, w = _grid_shape(cam.numel())
     return _to_heatmap(cam.reshape(h, w), pixel_values.shape[-2:]), target_class

@@ -30,7 +30,7 @@ function table(rows, cols, opts = {}) {
     return `<tr${cls}>` + cols.map(([k], i) =>
       `<td class="${i ? "n" : ""}">${fmt(r[k])}</td>`).join("") + "</tr>";
   }).join("");
-  return `<table class="ruled compact"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+  return `<div class="table-scroll"><table class="ruled compact"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 /* ------------------------------------------------------------------- boot */
@@ -76,33 +76,28 @@ async function loadSummary() {
 
 function renderBench(rows) {
   const best = Math.max(...rows.map((r) => r.full_macro_f1 ?? 0));
-  $("benchTable").outerHTML = `<table class="ruled" id="benchTable">` +
-    table(rows, [
-      ["backbone", "Backbone"], ["dim", "Dim"],
-      ["probe_acc", "Probe acc."], ["probe_macro_f1", "Probe macro-F1"],
-      ["full_acc", "Full acc."], ["full_macro_f1", "Full macro-F1"],
-      ["risk_r2_mean", "Risk R²"],
-    ], { highlight: (r) => r.full_macro_f1 === best }).replace(/^<table[^>]*>|<\/table>$/g, "") +
-    `</table>`;
+  $("benchTable").outerHTML = `<div id="benchTable">` + table(rows, [
+    ["backbone", "Backbone"], ["dim", "Dim"],
+    ["probe_acc", "Probe acc."], ["probe_macro_f1", "Probe macro-F1"],
+    ["full_acc", "Full acc."], ["full_macro_f1", "Full macro-F1"],
+    ["risk_r2_mean", "Risk R²"],
+  ], { highlight: (r) => r.full_macro_f1 === best }) + `</div>`;
 }
 
 function renderAbl(rows) {
-  $("ablTable").outerHTML = `<table class="ruled" id="ablTable">` +
-    table(rows, [
-      ["config", "Configuration"], ["test_acc", "Accuracy"],
-      ["test_macro_f1", "Macro-F1"], ["risk_r2_mean", "Risk R²"],
-      ["band_acc_mean", "Band acc."],
-    ], { highlight: (r) => (r.config || "").startsWith("FULL (") })
-      .replace(/^<table[^>]*>|<\/table>$/g, "") + `</table>`;
+  $("ablTable").outerHTML = `<div id="ablTable">` + table(rows, [
+    ["config", "Configuration"], ["test_acc", "Accuracy"],
+    ["test_macro_f1", "Macro-F1"], ["risk_r2_mean", "Risk R²"],
+    ["band_acc_mean", "Band acc."],
+  ], { highlight: (r) => (r.config || "").startsWith("FULL (") }) + `</div>`;
 }
 
 function renderMissing(rows) {
-  $("missingTable").outerHTML = `<table class="ruled" id="missingTable">` +
-    table(rows, [
-      ["missing_fraction", "Farms without a photo"], ["encoder", "Encoder"],
-      ["test_acc", "Accuracy"], ["test_macro_f1", "Macro-F1"],
-      ["risk_r2_mean", "Risk R²"],
-    ]).replace(/^<table[^>]*>|<\/table>$/g, "") + `</table>`;
+  $("missingTable").outerHTML = `<div id="missingTable">` + table(rows, [
+    ["missing_fraction", "Farms without a photo"], ["encoder", "Encoder"],
+    ["test_acc", "Accuracy"], ["test_macro_f1", "Macro-F1"],
+    ["risk_r2_mean", "Risk R²"],
+  ]) + `</div>`;
 }
 
 /* -------------------------------------------------------- literature survey */
@@ -135,10 +130,12 @@ function renderSurvey(list) {
         <div class="chev">▾</div>
       </div>
       <div class="paper-body">
-        <div class="field"><div class="k">Key contribution</div>${esc(p.contribution)}</div>
-        <div class="field gap"><div class="k">Research gap</div>${esc(p.gap)}</div>
-        <div class="field ans"><div class="k">Addressed in this work by</div>${esc(p.answer)}
-          <div class="modref">${esc(p.module)}</div></div>
+        <div class="field plain"><div class="k">Key contribution</div>${esc(p.contribution)}</div>
+        <div class="grid-2">
+          <div class="field gap"><div class="k">Research gap</div>${esc(p.gap)}</div>
+          <div class="field ans"><div class="k">Addressed by</div>${esc(p.answer)}
+            <div class="modref">${esc(p.module)}</div></div>
+        </div>
         <div class="demo-inline" data-demo="${p.demo}">
           <button class="run" data-demo="${p.demo}">Run demonstration — ${esc(demo.title || p.demo)}</button>
           <div class="demo-out"></div>

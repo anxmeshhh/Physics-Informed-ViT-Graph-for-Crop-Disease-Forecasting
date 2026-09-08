@@ -11,22 +11,19 @@
 
 <!-- ===================== MASTHEAD ===================== -->
 <header class="masthead">
-  <div class="wrap">
-    <div class="dept">Department of Computing Technologies &middot; Minor Project Report</div>
-    <h1 class="doc-title">Vision Transformer with Physics-Informed Graph Learning
-      for Climate-Adaptive Crop Disease Forecasting</h1>
-    <div class="authors">
-      <span>Animesh Gupta <em>RA2311026010375</em></span>
-      <span>Apurva Singh <em>RA2311026010376</em></span>
-      <span>Aastha Hotwani <em>RA2311026010389</em></span>
-      <span>Harsh Khetan <em>RA2311026010421</em></span>
+  <div class="wrap mast-inner">
+    <div>
+      <div class="dept">Department of Computing Technologies &middot; Minor Project</div>
+      <h1 class="doc-title">Vision Transformer with Physics-Informed Graph Learning
+        <span>for Climate-Adaptive Crop Disease Forecasting</span></h1>
+      <div class="authors">
+        <span>Animesh Gupta</span><span>Apurva Singh</span>
+        <span>Aastha Hotwani</span><span>Harsh Khetan</span>
+      </div>
     </div>
-    <div class="meta-line">
-      <span id="sysStatus" class="sys">System status: <b>checking…</b></span>
-      <span class="sep">|</span>
-      <span>Dataset: PlantVillage (54,305 images)</span>
-      <span class="sep">|</span>
-      <span>Meteorology: Open-Meteo ERA5 archive</span>
+    <div class="mast-status">
+      <div id="sysStatus" class="sys">checking…</div>
+      <div class="src">PlantVillage &middot; Open-Meteo ERA5</div>
     </div>
   </div>
 </header>
@@ -37,54 +34,73 @@
 <aside class="toc">
   <div class="toc-head">Contents</div>
   <ol id="tocList">
-    <li><a href="#s-abstract" class="active">Abstract</a></li>
+    <li><a href="#s-abstract" class="active">Overview</a></li>
     <li><a href="#s-survey">Literature Survey</a></li>
     <li><a href="#s-gap">Research Gap</a></li>
-    <li><a href="#s-method">Proposed Methodology</a></li>
-    <li><a href="#s-data">Dataset &amp; Grounding</a></li>
+    <li><a href="#s-method">Methodology</a></li>
+    <li><a href="#s-data">Dataset</a></li>
     <li><a href="#s-system">Live System</a></li>
-    <li><a href="#s-results">Results &amp; Ablations</a></li>
+    <li><a href="#s-results">Results</a></li>
     <li><a href="#s-conclusion">Conclusion</a></li>
   </ol>
   <div class="toc-note">
-    Each row of the literature survey carries a <b>Run demonstration</b> control that
-    executes the corresponding capability against the live system.
+    Every paper in the survey has a<br><b>Run demonstration</b> button that
+    executes against the live system.
   </div>
 </aside>
 
 <!-- ===================== BODY ===================== -->
 <main class="doc">
 
-<!-- 1. ABSTRACT -->
+<!-- 1. OVERVIEW -->
 <section id="s-abstract">
-  <h2><span class="num">1</span> Abstract</h2>
-  <p class="lead">
-    Conventional crop-disease systems classify a leaf photograph <em>after</em> symptoms
-    become visible, ignore the meteorology that governs infection, and treat every field
-    in isolation. This work implements a unified framework that fuses a frozen vision
-    transformer, engineered agro-meteorological features derived from real reanalysis
-    data, and a spatio-temporal graph over 37 Indian production districts, trained under
-    a physics-informed loss that encodes agronomic constraints. The system forecasts
-    disease risk at 1, 3, 5 and 7 day horizons.
-  </p>
+  <h2><span class="num">1</span> Overview</h2>
+
   <div class="keyfacts" id="keyFacts"></div>
-  <div class="callout">
-    <b>On evaluation integrity.</b> PlantVillage photographs each physical leaf 2.65 times
-    on average. A random split therefore places near-duplicate views of the same leaf on
-    both sides — affecting 35,246 of 54,305 images (65%). Every figure reported here uses
-    a <b>leaf-disjoint</b> split with zero shared leaf groups.
+
+  <div class="grid-3">
+    <div class="tile">
+      <h3>The problem</h3>
+      <ul class="tight">
+        <li>Existing systems classify a leaf <b>after</b> symptoms appear</li>
+        <li>They ignore weather, which is what drives infection</li>
+        <li>They treat every field as isolated</li>
+      </ul>
+    </div>
+    <div class="tile">
+      <h3>Our approach</h3>
+      <ul class="tight">
+        <li><b>Leaf image</b> &rarr; what disease is present</li>
+        <li><b>Real weather</b> &rarr; will infection spread</li>
+        <li><b>Neighbouring farms</b> &rarr; is it arriving</li>
+        <li>Forecast <b>1, 3, 5, 7 days ahead</b></li>
+      </ul>
+    </div>
+    <div class="tile">
+      <h3>Why climate matters</h3>
+      <ul class="tight">
+        <li>Late blight &rarr; <b>cool + wet</b> (17&deg;C)</li>
+        <li>Powdery mildew &rarr; humid air, <b>rain kills it</b></li>
+        <li>Spider mites &rarr; <b>hot + dry</b></li>
+        <li>Opposite responses; pixels cannot see this</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="callout compact">
+    <b>Evaluation integrity.</b> PlantVillage photographs each leaf 2.65&times; on average,
+    so a random split leaks 35,246 of 54,305 images (65%). All results use
+    <b>leaf-disjoint</b> splits &mdash; zero shared leaves.
   </div>
 </section>
 
 <!-- 2. LITERATURE SURVEY -->
 <section id="s-survey">
   <h2><span class="num">2</span> Literature Survey</h2>
-  <p>
-    Eighteen works spanning transformer-based plant pathology, physics-informed
-    modelling, and graph learning for agriculture. For each, the table records the
-    method, its contribution, and the gap it leaves open — together with the component
-    of this implementation that closes that gap, which can be executed directly from the
-    table.
+  <p class="sub-lead">
+    18 works across transformer plant pathology, physics-informed modelling and
+    graph learning. Each row states the gap it leaves &mdash; and runs the component
+    that closes it.
   </p>
 
   <div class="survey-controls">
@@ -99,92 +115,108 @@
 
 <!-- 3. RESEARCH GAP -->
 <section id="s-gap">
-  <h2><span class="num">3</span> Consolidated Research Gap</h2>
-  <table class="ruled">
-    <thead><tr><th style="width:52%">Gap identified across the surveyed literature</th><th>Addressed in this work by</th></tr></thead>
-    <tbody>
-      <tr><td>Systems focus on image-based detection and classification alone.</td>
-          <td>Classification is one of two heads; the second forecasts future risk.</td></tr>
-      <tr><td>Climate variables are not integrated with visual disease features.</td>
-          <td>FiLM-gated fusion lets climate modulate the visual representation.</td></tr>
-      <tr><td>Disease spread between geographically connected farms is not captured.</td>
-          <td>Spatio-temporal graph with directed downwind edges across 37 districts.</td></tr>
-      <tr><td>Physics-informed knowledge is rarely unified with visual and spatial prediction.</td>
-          <td>Four agronomic constraints enter the objective as a soft physics loss.</td></tr>
-      <tr><td>Most systems identify current disease rather than forecasting 1–7 days ahead.</td>
-          <td>Autoregressive multi-horizon forecaster over 1, 3, 5 and 7 days.</td></tr>
-      <tr><td>Geospatial visualisation of predicted affected areas is generally absent.</td>
-          <td>Regional risk map over the farm network (Section 6).</td></tr>
-    </tbody>
-  </table>
+  <h2><span class="num">3</span> Research Gap</h2>
+  <div class="grid-2 gap-grid" id="gapGrid">
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>Image-based detection and classification only</p>
+      <div class="anslabel">Addressed by</div><p>Classification is one of two heads; the second forecasts future risk</p>
+    </div>
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>Climate variables not integrated with visual features</p>
+      <div class="anslabel">Addressed by</div><p>FiLM-gated fusion lets climate modulate the visual representation</p>
+    </div>
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>Spread between connected farms not captured</p>
+      <div class="anslabel">Addressed by</div><p>Spatio-temporal graph with directed downwind edges, 37 districts</p>
+    </div>
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>Physics knowledge not unified with spatial prediction</p>
+      <div class="anslabel">Addressed by</div><p>Four agronomic constraints enter the objective as a soft physics loss</p>
+    </div>
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>Current identification, not 1&ndash;7 day forecasting</p>
+      <div class="anslabel">Addressed by</div><p>Autoregressive multi-horizon forecaster over 1, 3, 5 and 7 days</p>
+    </div>
+    <div class="gapcard">
+      <div class="gaplabel">Gap</div><p>No geospatial view of predicted affected areas</p>
+      <div class="anslabel">Addressed by</div><p>Regional risk map over the farm network (Section 6)</p>
+    </div>
+  </div>
 </section>
 
 <!-- 4. METHODOLOGY -->
 <section id="s-method">
-  <h2><span class="num">4</span> Proposed Methodology</h2>
-  <p>The architecture proceeds in six blocks. Each is implemented as an independent module.</p>
+  <h2><span class="num">4</span> Methodology</h2>
   <div id="methodFlow" class="method-flow"></div>
 
-  <h3>4.1 &ensp;Agronomic knowledge base</h3>
-  <p>
-    Temperature response follows the Analytis beta model, which is zero outside the
-    cardinal temperatures and peaks at the optimum. The moisture term takes a different
-    functional form per organism, so several pathogens respond in <em>opposite</em>
-    directions to the same weather — this is what makes the climate stream informative.
-  </p>
-  <div class="demo-inline" data-demo="epidemiology">
-    <button class="run" data-demo="epidemiology">Run demonstration &mdash; pathogen response on real weather</button>
-    <div class="demo-out"></div>
-  </div>
-
-  <h3>4.2 &ensp;Physics-informed loss</h3>
-  <p>
-    The loss never sees the epidemiological model used to construct the benchmark;
-    that would be circular. It states only weak directional facts, so the network must
-    still learn the quantitative relationship from data.
-  </p>
-  <div class="demo-inline" data-demo="physics_constraints">
-    <button class="run" data-demo="physics_constraints">Run demonstration &mdash; evaluate each constraint</button>
-    <div class="demo-out"></div>
+  <div class="grid-2 demo-pair">
+    <div class="tile">
+      <h3>4.1 &ensp;Agronomic knowledge base</h3>
+      <ul class="tight">
+        <li>Analytis beta model for temperature response</li>
+        <li>Moisture term differs <b>per organism</b></li>
+        <li>Several pathogens respond in opposite directions</li>
+      </ul>
+      <div class="demo-inline" data-demo="epidemiology">
+        <button class="run" data-demo="epidemiology">Run demonstration</button>
+        <div class="demo-out"></div>
+      </div>
+    </div>
+    <div class="tile">
+      <h3>4.2 &ensp;Physics-informed loss</h3>
+      <ul class="tight">
+        <li>Risk must rise with leaf wetness and humidity</li>
+        <li>Dry air must suppress fungal risk</li>
+        <li>Risk must be smooth across connected farms</li>
+        <li>Uncertainty must grow with horizon</li>
+      </ul>
+      <div class="demo-inline" data-demo="physics_constraints">
+        <button class="run" data-demo="physics_constraints">Run demonstration</button>
+        <div class="demo-out"></div>
+      </div>
+    </div>
   </div>
 </section>
 
 <!-- 5. DATASET -->
 <section id="s-data">
-  <h2><span class="num">5</span> Dataset and Spatio-Temporal Grounding</h2>
-  <p>
-    PlantVillage ships no coordinates and no timestamps, yet the graph needs a location
-    and the climate layer needs a date. Each leaf is therefore placed at a farm that
-    genuinely grows that crop, on a date inside that crop's real growing season, weighted
-    by whether the <b>weather actually recorded there</b> was epidemiologically plausible
-    for the labelled disease. The draw is stochastic with a probability floor, so the
-    mapping is noisy and cannot be inverted.
-  </p>
+  <h2><span class="num">5</span> Dataset</h2>
 
-  <table class="ruled compact">
-    <thead><tr><th>Component</th><th>Provenance</th><th>Status</th></tr></thead>
-    <tbody>
-      <tr><td>54,305 leaf images, 38 classes, 14 crops</td><td>PlantVillage (CC BY-SA 3.0)</td><td class="tag-real">Real</td></tr>
-      <tr><td>41,662 site-days of daily meteorology</td><td>Open-Meteo ERA5 archive</td><td class="tag-real">Real</td></tr>
-      <tr><td>37 farm districts, Srinagar to Munnar</td><td>Indian production belts</td><td class="tag-real">Real</td></tr>
-      <tr><td>Pairing of an image to a (farm, date)</td><td>Weighted by recorded weather</td><td class="tag-con">Constructed</td></tr>
-    </tbody>
-  </table>
-
-  <p class="verify">
-    <b>Verified, not asserted:</b> climate features alone reach <b>43.9%</b> accuracy on the
-    38-class problem (chance 2.6%, majority class 10.4%). The climate layer therefore
-    carries substantial signal without making the task trivial — the leaf image still does
-    most of the work.
-  </p>
-
-  <div class="demo-inline" data-demo="climate_niche">
-    <button class="run" data-demo="climate_niche">Run demonstration &mdash; climate niche of each disease</button>
-    <div class="demo-out"></div>
+  <div class="grid-2">
+    <div>
+      <table class="ruled compact">
+        <thead><tr><th>Component</th><th>Source</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td>54,305 leaf images &middot; 38 classes</td><td>PlantVillage</td><td><span class="tag-real">Real</span></td></tr>
+          <tr><td>41,662 site-days of weather</td><td>Open-Meteo ERA5</td><td><span class="tag-real">Real</span></td></tr>
+          <tr><td>37 farm districts</td><td>Indian production belts</td><td><span class="tag-real">Real</span></td></tr>
+          <tr><td>Image &rarr; (farm, date) pairing</td><td>Weighted by recorded weather</td><td><span class="tag-con">Constructed</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tile">
+      <h3>Verified, not asserted</h3>
+      <ul class="tight">
+        <li>Climate alone &rarr; <b>43.9%</b> on 38 classes</li>
+        <li>Random chance &rarr; 2.6%</li>
+        <li>Majority class &rarr; 10.4%</li>
+      </ul>
+      <p class="micro">Climate carries real signal, but the leaf image still does most
+        of the work &mdash; exactly what a genuine forecasting problem looks like.</p>
+    </div>
   </div>
-  <div class="demo-inline" data-demo="graph_structure">
-    <button class="run" data-demo="graph_structure">Run demonstration &mdash; build the spatio-temporal graph</button>
-    <div class="demo-out"></div>
+
+  <div class="grid-2 demo-pair">
+    <div class="demo-inline tile" data-demo="climate_niche">
+      <h3>Climate niche per disease</h3>
+      <button class="run" data-demo="climate_niche">Run demonstration</button>
+      <div class="demo-out"></div>
+    </div>
+    <div class="demo-inline tile" data-demo="graph_structure">
+      <h3>Build the spatial graph</h3>
+      <button class="run" data-demo="graph_structure">Run demonstration</button>
+      <div class="demo-out"></div>
+    </div>
   </div>
 </section>
 
@@ -193,10 +225,7 @@
   <h2><span class="num">6</span> Live System</h2>
 
   <h3>6.1 &ensp;Single-observation inference</h3>
-  <p>Submit a leaf photograph together with a farm and a date. The system returns a
-     diagnosis, a four-horizon risk forecast, the weather that drove it, and an advisory.</p>
-
-  <div class="two">
+  <div class="two-wide">
     <div class="box">
       <div class="box-title">Input</div>
       <label>Leaf photograph</label>
@@ -204,20 +233,16 @@
         <input type="file" id="fileInput" accept="image/*" hidden>
         <img id="preview" alt="">
         <div id="dropHint">
-          <p>Click to select, or drop a file here</p>
-          <p class="hint">Any image under <code>data/raw/raw/color/</code></p>
+          <p>Click or drop a file</p>
+          <p class="hint"><code>data/raw/raw/color/</code></p>
         </div>
       </div>
-
       <label for="siteSelect">Farm</label>
       <select id="siteSelect"></select>
-
-      <label for="dateInput">Observation date</label>
+      <label for="dateInput">Date</label>
       <input type="date" id="dateInput" min="2021-01-01" max="2023-12-24" value="2023-07-15">
-
-      <label for="cropSelect">Crop <span class="hint">(optional; inferred if left blank)</span></label>
+      <label for="cropSelect">Crop <span class="hint">optional</span></label>
       <select id="cropSelect"><option value="">Infer from image</option></select>
-
       <button class="run wide" id="predictBtn">Run full pipeline</button>
       <p class="err" id="predictError"></p>
     </div>
@@ -231,114 +256,93 @@
           <tr><th>Crop</th><td id="diagCrop">—</td></tr>
           <tr><th>Confidence</th><td id="diagConf">—</td></tr>
         </table>
-
-        <div class="sub">Forecast horizons</div>
-        <table class="ruled compact" id="horizonTable"></table>
-        <canvas id="riskChart" height="140"></canvas>
-
-        <div class="sub">Driving meteorology</div>
-        <table class="ruled compact" id="climateTable"></table>
-
+        <div class="sub">Forecast</div>
+        <div class="split">
+          <table class="ruled compact" id="horizonTable"></table>
+          <canvas id="riskChart" height="150"></canvas>
+        </div>
         <div class="sub">Advisory</div>
         <p class="advisory" id="advisory"></p>
-
-        <div class="sub">Alternative diagnoses</div>
-        <table class="ruled compact" id="topk"></table>
+        <div class="split">
+          <div><div class="sub">Driving weather</div>
+            <table class="ruled compact" id="climateTable"></table></div>
+          <div><div class="sub">Alternatives</div>
+            <table class="ruled compact" id="topk"></table></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <h3>6.2 &ensp;Regional disease-risk map</h3>
-  <p>Agronomic pressure at every registered farm growing the selected crop, computed from
-     the weather actually recorded on that date. Lines show the graph along which the
-     network passes messages.</p>
+  <h3>6.2 &ensp;Regional risk map</h3>
   <div class="controls">
     <label for="mapCrop">Crop</label><select id="mapCrop"></select>
     <label for="mapDate">Date</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-07-15">
     <label class="inline"><input type="checkbox" id="showEdges" checked> graph edges</label>
     <button class="run" id="mapBtn">Update map</button>
+    <span class="legend"><span><i class="sw low"></i>Low</span><span><i class="sw med"></i>Medium</span><span><i class="sw high"></i>High</span></span>
   </div>
   <div id="leaflet"></div>
-  <div class="legend"><span><i class="sw low"></i>Low</span><span><i class="sw med"></i>Medium</span><span><i class="sw high"></i>High</span></div>
   <table class="ruled compact" id="mapTable"></table>
 </section>
 
 <!-- 7. RESULTS -->
 <section id="s-results">
-  <h2><span class="num">7</span> Results and Ablations</h2>
+  <h2><span class="num">7</span> Results</h2>
 
   <h3>7.1 &ensp;Vision transformer benchmark</h3>
-  <p>Four transformer families under one identical downstream pipeline, evaluated on the
-     leaf-disjoint test set. The linear probe measures raw representation quality; the
-     full pipeline adds fusion, graph and forecasting.</p>
-  <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code>.</td></tr></tbody></table>
+  <p class="sub-lead">Identical downstream pipeline; only the frozen backbone changes.</p>
+  <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code></td></tr></tbody></table>
 
   <h3>7.2 &ensp;Component ablations</h3>
-  <p>What each component is worth, measured by removing it.</p>
-  <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code>.</td></tr></tbody></table>
+  <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code></td></tr></tbody></table>
 
-  <h3>7.3 &ensp;When the graph earns its place</h3>
-  <p>
-    With every farm submitting a photograph, a frozen transformer already identifies the
-    disease at roughly 98% accuracy and message passing has little headroom. The
-    operational case for a graph is different: farms that submit <em>no</em> photograph
-    have no visual evidence, and only their neighbours can supply it. This experiment
-    masks the vision stream for a growing fraction of farms.
-  </p>
-  <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code>.</td></tr></tbody></table>
+  <h3>7.3 &ensp;Graph value as observations get sparse</h3>
+  <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code></td></tr></tbody></table>
 
   <h3>7.4 &ensp;A negative result, reported</h3>
-  <div class="callout">
-    <p style="margin-top:0">
-      <b>The graph neural network does not improve accuracy on this benchmark.</b>
-      Removing it and replacing the encoder with a plain MLP over the same fused
-      features <em>raises</em> macro-F1 and forecast R². This held across two
-      independently constructed versions of the dataset, at five levels of
-      observation sparsity, and for both GraphSAGE and GCN. It is a measured
-      result, not a tuning failure we stopped short of fixing.
-    </p>
-    <p>Two things explain it, and both are properties of the problem rather than of the code:</p>
-    <ul>
-      <li><b>No headroom on diagnosis.</b> A frozen ViT-B/16 reaches ~98.8% accuracy
-        on the leaf-disjoint test set from the image alone. Averaging in neighbouring
-        farms — which carry <em>different</em> diseases — can only dilute a signal that
-        is already almost saturated.</li>
-      <li><b>A farm's own state is nearly a sufficient statistic.</b> In the simulated
-        epidemic, a farm's current infection pressure predicts its pressure three days
-        later at r = 0.83. Its neighbours reach r = 0.85 — better, but the
-        <em>incremental</em> information beyond the farm's own state is small, and the
-        node already observes that directly through its leaf image and weather.</li>
-    </ul>
-    <p style="margin-bottom:0">
-      The graph is retained as the default configuration because it is the architecture
-      this project set out to implement, and because its cost is now quantified rather
-      than assumed. A spatial model should be expected to pay for itself where per-farm
-      evidence is weak or absent; establishing the conditions under which it does is
-      the natural next experiment.
-    </p>
+  <div class="grid-2">
+    <div class="callout compact">
+      <b>The graph does not improve accuracy on this benchmark.</b>
+      <ul class="tight">
+        <li>Replacing it with a plain MLP <b>raises</b> macro-F1 and risk R&sup2;</li>
+        <li>Held across 2 datasets, 5 sparsity levels, 2 encoders</li>
+        <li>A measured result, not a tuning failure</li>
+      </ul>
+    </div>
+    <div class="tile">
+      <h3>Why</h3>
+      <ul class="tight">
+        <li><b>No headroom.</b> A frozen ViT already hits ~98.8% from the image alone;
+          averaging in neighbours with <i>different</i> diseases only dilutes it</li>
+        <li><b>Own state is near-sufficient.</b> A farm predicts its own risk in 3 days
+          at r&nbsp;=&nbsp;0.83; neighbours reach 0.85 &mdash; better, but barely</li>
+      </ul>
+      <p class="micro">The graph stays as the default because it is the architecture this
+        project set out to build, and its cost is now measured rather than assumed.</p>
+    </div>
   </div>
 </section>
 
 <!-- 8. CONCLUSION -->
 <section id="s-conclusion">
-  <h2><span class="num">8</span> Conclusion and Future Scope</h2>
-  <div class="two">
-    <div>
-      <h3>Conclusion</h3>
-      <ul>
-        <li>A frozen vision transformer provides strong disease features at low training cost.</li>
-        <li>Engineered agro-meteorology contributes measurable, independently verified signal.</li>
-        <li>A physics-informed loss enforces agronomic behaviour without overriding the data.</li>
-        <li>Multi-horizon forecasting turns detection into anticipation.</li>
+  <h2><span class="num">8</span> Conclusion</h2>
+  <div class="grid-2">
+    <div class="tile">
+      <h3>What worked</h3>
+      <ul class="tight">
+        <li>Frozen transformer &rarr; strong features, minutes to train</li>
+        <li>Engineered agro-meteorology &rarr; verified independent signal</li>
+        <li>Physics loss &rarr; agronomic behaviour without overriding data</li>
+        <li>Multi-horizon head &rarr; detection becomes anticipation</li>
       </ul>
     </div>
-    <div>
+    <div class="tile">
       <h3>Future scope</h3>
-      <ul>
-        <li>Drone and satellite multispectral imagery as additional node features.</li>
-        <li>Live weather forecast forcing rather than reanalysis at inference time.</li>
-        <li>IoT canopy sensors for measured, rather than inferred, leaf wetness.</li>
-        <li>Field validation against recorded outbreak records.</li>
+      <ul class="tight">
+        <li>Drone and satellite multispectral imagery</li>
+        <li>Live forecast forcing instead of reanalysis</li>
+        <li>IoT canopy sensors for measured leaf wetness</li>
+        <li>Validation against recorded outbreak records</li>
       </ul>
     </div>
   </div>
@@ -349,7 +353,7 @@
 
 <footer class="foot">
   <div class="wrap">
-    <span>PlantVillage (Hughes &amp; Salath&eacute;), CC BY-SA 3.0 &middot; Open-Meteo Historical Weather API (ERA5)</span>
+    <span>PlantVillage (CC BY-SA 3.0) &middot; Open-Meteo Historical Weather API (ERA5)</span>
     <span><a href="/docs">API reference</a></span>
   </div>
 </footer>

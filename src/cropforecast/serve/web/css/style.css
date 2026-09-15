@@ -177,6 +177,9 @@ button.run { font-family: inherit; font-size: 13.5px; font-weight: 650; backgrou
 button.run:hover { background: #1d417c; }
 button.run:disabled { background: var(--ink-faint); cursor: not-allowed; }
 button.run.wide { width: 100%; margin-top: 20px; padding: 12px; }
+button.run.ghost { background: var(--paper); color: var(--navy); border: 1px solid var(--navy); font-weight: 600; padding: 8px 16px; }
+button.run.ghost:hover { background: var(--navy-soft); }
+button.run.ghost:disabled { background: var(--paper); color: var(--ink-faint); border-color: var(--rule); }
 
 .demo-inline { margin-top: 16px; }
 .demo-out:empty { display: none; }
@@ -212,6 +215,9 @@ select:focus, input:focus { outline: none; border-color: var(--navy); }
 .dropzone p { margin: 3px 0; font-size: 13.5px; color: var(--ink-soft); }
 #preview { display: none; max-width: 100%; max-height: 250px; border-radius: 3px; }
 #preview.show { display: block; }
+.sample-bar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; }
+.sample-bar .hint { flex: 1 1 180px; line-height: 1.35; }
+.sample-bar .hint b { color: var(--ink); font-weight: 650; }
 
 .placeholder { color: var(--ink-faint); font-size: 13.5px; padding: 26px 0; }
 .err { color: var(--high); font-size: 13px; min-height: 17px; margin-top: 10px; }

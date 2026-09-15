@@ -7,6 +7,7 @@ const BAND_COLOUR = { Low: "#1c6ea4", Medium: "#b07d0a", High: "#9d2235" };
 
 let riskChart = null, leafletMap = null, mapLayers = null;
 let selectedFile = null, demoCatalogue = {}, papers = [];
+let samples = [], sampleIdx = -1;
 const demoCharts = {};
 
 /* ------------------------------------------------------------------ utils */
@@ -18,7 +19,7 @@ async function getJSON(url) {
 }
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-const pretty = (n) => String(n).replace(/_/g, " ").replace(/___/g, " — ");
+const pretty = (n) => String(n).replace(/___/g, " — ").replace(/_/g, " ");
 const fmt = (v) => (typeof v === "number"
   ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(4)) : esc(v ?? "—"));
 
@@ -47,6 +48,7 @@ async function boot() {
   }
   renderMethod();
   await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops()]);
+  await loadSamples();          // needs siteSelect to be populated first
   initTOC();
   bindDemoButtons(document);
 }
@@ -424,8 +426,59 @@ function setFile(file) {
   r.readAsDataURL(file);
 }
 
+/* ------------------------------------------------------------ sample input */
+/* One button that fills every field from tests/index.csv and runs the pipeline.
+   Each click advances to the next curated image, so the demo never repeats. */
+async function loadSamples() {
+  try {
+    const d = await getJSON("/api/samples");
+    samples = d.samples || [];
+  } catch { samples = []; }
+  if (samples.length) $("sampleBar").hidden = false;
+}
+
+function describeSample(s, n) {
+  const conf = s.confidence == null ? "" :
+    ` &middot; expected <b>${(s.confidence * 100).toFixed(1)}%</b>`;
+  return `Sample ${n}/${samples.length} &middot; <b>${esc(pretty(s.true_class))}</b>` +
+         `<br>${esc(s.farm)} &middot; ${esc(s.date)}${conf}`;
+}
+
+$("sampleBtn").addEventListener("click", async () => {
+  if (!samples.length) return;
+  const btn = $("sampleBtn");
+  btn.disabled = true; btn.textContent = "Loading…";
+  $("predictError").textContent = "";
+
+  try {
+    sampleIdx = (sampleIdx + 1) % samples.length;
+    const s = samples[sampleIdx];
+
+    const res = await fetch(`/api/samples/${encodeURIComponent(s.file)}`);
+    if (!res.ok) throw new Error(`Could not load ${s.file}`);
+    const blob = await res.blob();
+    setFile(new File([blob], s.file, { type: blob.type || "image/jpeg" }));
+
+    $("siteSelect").value = s.site_id;
+    if (!$("siteSelect").value) throw new Error(`Farm ${s.site_id} is not in the registry`);
+    $("dateInput").value = s.date;
+    // Left on "infer from image" deliberately: that is how tests/index.csv
+    // measured its confidences, so the number on screen matches the table.
+    $("cropSelect").value = "";
+    $("sampleNote").innerHTML = describeSample(s, sampleIdx + 1);
+
+    await runPredict();
+  } catch (err) {
+    $("predictError").textContent = err.message;
+  } finally {
+    btn.disabled = false; btn.textContent = "Next sample";
+  }
+});
+
 /* ----------------------------------------------------------------- predict */
-$("predictBtn").addEventListener("click", async () => {
+$("predictBtn").addEventListener("click", runPredict);
+
+async function runPredict() {
   $("predictError").textContent = "";
   if (!selectedFile) { $("predictError").textContent = "Select a leaf image first."; return; }
   const btn = $("predictBtn");
@@ -447,7 +500,7 @@ $("predictBtn").addEventListener("click", async () => {
   } finally {
     btn.disabled = false; btn.textContent = "Run full pipeline";
   }
-});
+}
 
 function showResult(d) {
   $("resultEmpty").hidden = true;

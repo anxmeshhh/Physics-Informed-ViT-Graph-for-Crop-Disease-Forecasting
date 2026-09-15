@@ -23,12 +23,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
-from ..config import load_config
+from ..config import PROJECT_ROOT, load_config
 from ..data.farms import to_frame
 from . import demos, literature
 from .inference import ForecastService
 
 WEB_DIR = Path(__file__).parent / "web"
+SAMPLES_DIR = PROJECT_ROOT / "tests"
 
 app = FastAPI(
     title="Climate-Adaptive Crop Disease Forecasting",
@@ -89,6 +90,57 @@ def sites():
 def crops():
     svc = service()
     return {"crops": [{"crop": c, "season": svc.season_for(c)} for c in svc.crops()]}
+
+
+# --- curated sample inputs -------------------------------------------------
+_samples: list[dict] | None = None
+
+
+def sample_index() -> list[dict]:
+    """The curated demo set described by ``tests/index.csv``, read once.
+
+    Each row already pairs an image with a farm that grows that crop and a date
+    inside its season, so a one-click demonstration cannot produce a nonsense
+    forecast. Rows whose image is missing are dropped rather than served as 404s.
+    """
+    global _samples
+    if _samples is not None:
+        return _samples
+
+    index = SAMPLES_DIR / "index.csv"
+    if not index.exists():
+        _samples = []
+        return _samples
+
+    df = pd.read_csv(index)
+    _samples = [
+        {
+            "file": str(r.file),
+            "true_class": str(r.true_class),
+            "crop": str(r.crop),
+            "confidence": (None if pd.isna(r.confidence) else round(float(r.confidence), 4)),
+            "site_id": str(r.suggested_site_id),
+            "farm": str(r.suggested_farm),
+            "date": str(r.suggested_date),
+        }
+        for r in df.itertuples()
+        if (SAMPLES_DIR / str(r.file)).is_file()
+    ]
+    return _samples
+
+
+@app.get("/api/samples")
+def samples():
+    """Demo images from the held-out test split, with a farm and date for each."""
+    return {"count": len(sample_index()), "samples": sample_index()}
+
+
+@app.get("/api/samples/{name}")
+def sample_image(name: str):
+    """Serve one curated image. Only names listed in the index are reachable."""
+    if name not in {s["file"] for s in sample_index()}:
+        raise HTTPException(status_code=404, detail=f"No sample image named {name!r}")
+    return FileResponse(str(SAMPLES_DIR / name), media_type="image/jpeg")
 
 
 @app.get("/api/summary")

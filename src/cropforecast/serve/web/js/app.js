@@ -495,10 +495,29 @@ async function runPredict() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Prediction failed");
     showResult(data);
+    syncMapToRun(data);       // not awaited: the diagnosis should not wait on the map
   } catch (err) {
     $("predictError").textContent = err.message;
   } finally {
     btn.disabled = false; btn.textContent = "Run full pipeline";
+  }
+}
+
+/* The regional map answers "where else is this crop at risk on this date?", so
+   it should never be left showing a different crop or date than the run above
+   it. Anything that fails here is reported in the map's own table, never on
+   top of the diagnosis. */
+async function syncMapToRun(d) {
+  try {
+    const crop = $("mapCrop");
+    if (d.crop && [...crop.options].some((o) => o.value === d.crop)) crop.value = d.crop;
+    if (d.date) $("mapDate").value = d.date;
+    await updateMap();
+  } catch (err) {
+    // initMap() runs outside updateMap's own guard, so a CDN-less Leaflet
+    // would otherwise reject here unseen.
+    $("mapTable").innerHTML =
+      `<tbody><tr><td class="err">Map unavailable: ${esc(err.message)}</td></tr></tbody>`;
   }
 }
 

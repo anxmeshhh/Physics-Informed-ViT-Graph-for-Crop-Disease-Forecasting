@@ -152,12 +152,24 @@ class ForecastService:
     @torch.no_grad()
     def predict(self, image: Image.Image, site_id: str, when: Date,
                 crop: str | None = None, top_k: int = 5) -> Prediction:
-        """Run the full path and record what each stage actually did.
+        """Run the full path to completion and return the Prediction."""
+        gen = self.predict_steps(image, site_id, when, crop=crop, top_k=top_k)
+        while True:
+            try:
+                next(gen)
+            except StopIteration as done:
+                return done.value
 
-        The trace is measured, not narrated: every entry carries the wall-clock
-        cost of the block that produced it and the shape it handed on. The
-        dashboard animates these in order, so what the audience watches is the
-        run that just happened rather than a diagram of one.
+    @torch.no_grad()
+    def predict_steps(self, image: Image.Image, site_id: str, when: Date,
+                      crop: str | None = None, top_k: int = 5):
+        """Run the full path, yielding each stage the moment it completes.
+
+        A generator rather than a plain call so the dashboard can render the
+        pipeline while it is still running: the endpoint streams whatever has
+        been yielded so far. The trace is measured, not narrated - every entry
+        carries the wall-clock cost of the block that produced it and the shape
+        it handed on - and the generator returns the finished Prediction.
         """
         if site_id not in self.site_lookup:
             raise ValueError(f"Unknown site {site_id!r}")
@@ -170,21 +182,24 @@ class ForecastService:
             """Close one stage, timing it from the end of the previous one."""
             nonlocal t0
             now = time.perf_counter()
-            trace.append({
+            rec = {
                 "block": block, "name": name, "detail": detail,
                 "output": output, "ms": round((now - t0) * 1000, 1),
-            })
+                "index": len(trace),
+            }
+            trace.append(rec)
             t0 = now
+            return rec
 
         # 1 - the farm's real recorded weather for that day
         row = self.climate_row(site_id, when)
-        step("Input", "Climate lookup",
+        yield step("Input", "Climate lookup",
              f"ERA5 reanalysis for {site.name}, {site.state} on {when}",
              f"1 site-day x {len(self.space.climate_cols)} columns")
 
         # 2 - frozen transformer over the photograph
         vision = self._embed(image)
-        step("Vision", f"Frozen {self.model_cfg['backbone'].upper()} backbone",
+        yield step("Vision", f"Frozen {self.model_cfg['backbone'].upper()} backbone",
              "Leaf resized to 224px, normalised, encoded with no gradient",
              f"{tuple(vision.shape)[-1]}-d embedding")
 
@@ -193,7 +208,7 @@ class ForecastService:
         # been classified.
         crop_guess = crop or site.crops[0]
         climate_t, meta_t = self._tabular(row, crop_guess, when)
-        step("Climate", "Agro-meteorology + scaling",
+        yield step("Climate", "Agro-meteorology + scaling",
              "VPD, leaf wetness, GDD and rolling windows, then standardised",
              f"{tuple(climate_t.shape)[-1]}-d climate | "
              f"{tuple(meta_t.shape)[-1]}-d metadata")
@@ -203,12 +218,12 @@ class ForecastService:
         #     composition is identical.
         empty_edges = torch.zeros((2, 0), dtype=torch.long, device=self.device)
         fused = self.model.fusion(vision, climate_t, meta_t)
-        step("Fusion", "FiLM-gated fusion",
+        yield step("Fusion", "FiLM-gated fusion",
              "Climate modulates the visual representation; streams share a width",
              f"{tuple(fused.shape)[-1]}-d fused node")
 
         z = self.model.encoder(fused, empty_edges, None)
-        step("Graph", f"{self.model_cfg['gnn_conv'].upper()} encoder, "
+        yield step("Graph", f"{self.model_cfg['gnn_conv'].upper()} encoder, "
              f"{self.model_cfg['gnn_layers']} layers",
              "One observation has no neighbours, so the GNN runs on a 1-node "
              "graph and falls back to its self-transform",
@@ -221,7 +236,7 @@ class ForecastService:
                 "probability": float(probs[int(i)])} for i in order]
         best = self.class_names[int(order[0])]
         best_crop = best.split("___", 1)[0]
-        step("Diagnosis", "Classification head",
+        yield step("Diagnosis", "Classification head",
              f"Softmax over {len(self.class_names)} classes",
              f"{best.split('___', 1)[-1].replace('_', ' ')} "
              f"@ {float(probs[int(order[0])]) * 100:.1f}%")
@@ -237,7 +252,7 @@ class ForecastService:
             z = self.model.encoder(
                 self.model.fusion(vision, climate_t, meta_t), empty_edges, None)
             out = self.model.forecaster(z)
-            step("Consistency", "Re-run with the observed crop",
+            yield step("Consistency", "Re-run with the observed crop",
                  f"Image says {best_crop}, metadata assumed {crop_guess}; "
                  "the metadata stream is corrected and the pass repeated",
                  f"crop = {best_crop}")
@@ -247,7 +262,7 @@ class ForecastService:
         bands = [RISK_LABELS[int(l.argmax())] for l in levels]
         band_conf = [float(l.max()) for l in levels]
         sigma = (out["logvar"][0] * 0.5).exp().tolist()
-        step("Forecast", "Multi-horizon risk head",
+        yield step("Forecast", "Multi-horizon risk head",
              f"Risk, band and uncertainty at +{', +'.join(str(h) for h in self.horizons)} days",
              " | ".join(f"+{h}d {r * 100:.0f}% {b}"
                         for h, r, b in zip(self.horizons, risk, bands)))
@@ -264,7 +279,7 @@ class ForecastService:
         }
 
         note = self.advisory(best, bands, climate_summary)
-        step("Advisory", "Agronomic advisory",
+        yield step("Advisory", "Agronomic advisory",
              "Diagnosis and forecast bands turned into an action note",
              note.split(".")[0] + ".")
 

@@ -20,7 +20,7 @@ from pathlib import Path
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
@@ -539,6 +539,58 @@ async def predict(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return pred.__dict__
+
+
+@app.post("/api/predict/stream")
+async def predict_stream(
+    image: UploadFile = File(...),
+    site_id: str = Form(...),
+    date: str = Form(...),
+    crop: str | None = Form(None),
+):
+    """The same pipeline, emitted stage by stage as it runs.
+
+    Newline-delimited JSON: one ``step`` object each time a block of the model
+    finishes, then a single ``result``. The dashboard draws each stage as it
+    arrives, so what the audience watches is the run actually progressing
+    rather than a replay assembled after it finished.
+    """
+    svc = service()
+    try:
+        when = Date.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+
+    raw = await image.read()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Empty image upload")
+    try:
+        img = Image.open(io.BytesIO(raw))
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Unreadable image: {exc}") from exc
+
+    def lines():
+        """Sync generator; Starlette drains it on a worker thread."""
+        gen = svc.predict_steps(img, site_id, when, crop=crop)
+        try:
+            while True:
+                try:
+                    step = next(gen)
+                except StopIteration as done:
+                    yield json.dumps({"type": "result",
+                                      "result": done.value.__dict__}) + "\n"
+                    return
+                yield json.dumps({"type": "step", "step": step}) + "\n"
+        except ValueError as exc:
+            # Bad site or missing climate row: the status line is already sent,
+            # so the failure has to travel inside the stream.
+            yield json.dumps({"type": "error", "detail": str(exc)}) + "\n"
+
+    return StreamingResponse(
+        lines(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/graph")

@@ -9,6 +9,7 @@ let riskChart = null, leafletMap = null, mapLayers = null;
 let selectedFile = null, demoCatalogue = {}, papers = [];
 let samples = [], sampleIdx = -1;
 const demoCharts = {};
+let pipeTimer = null, pipeStarted = 0;
 
 /* ------------------------------------------------------------------ utils */
 async function getJSON(url) {
@@ -558,13 +559,27 @@ $("sampleBtn").addEventListener("click", async () => {
     $("cropSelect").value = "";
     $("sampleNote").innerHTML = describeSample(s, sampleIdx + 1);
 
-    await runPredict();
+    // Deliberately does not run: the operator presses "Run full pipeline" when
+    // the room is watching, so the trace animates on cue rather than on load.
+    resetRun();
+    $("predictBtn").classList.add("ready");
   } catch (err) {
     $("predictError").textContent = err.message;
   } finally {
     btn.disabled = false; btn.textContent = "Next sample";
   }
 });
+
+/* Clear the previous run so a loaded sample never sits next to a stale
+   diagnosis from the sample before it. */
+function resetRun() {
+  $("resultBody").hidden = true;
+  $("resultEmpty").hidden = false;
+  $("resultEmpty").textContent = "Press Run full pipeline.";
+  $("pipeline").innerHTML =
+    `<p class="placeholder">Run the pipeline to trace it.</p>`;
+  if (riskChart) { riskChart.destroy(); riskChart = null; }
+}
 
 /* ----------------------------------------------------------------- predict */
 $("predictBtn").addEventListener("click", runPredict);
@@ -574,7 +589,9 @@ async function runPredict() {
   if (!selectedFile) { $("predictError").textContent = "Select a leaf image first."; return; }
   const btn = $("predictBtn");
   btn.disabled = true; btn.textContent = "Running…";
-  $("pipeline").innerHTML = `<p class="placeholder">Running the pipeline&hellip;</p>`;
+  btn.classList.remove("ready");
+  resetRun();
+  $("resultEmpty").textContent = "Running…";
 
   const fd = new FormData();
   fd.append("image", selectedFile);
@@ -583,17 +600,66 @@ async function runPredict() {
   if ($("cropSelect").value) fd.append("crop", $("cropSelect").value);
 
   try {
-    const res = await fetch("/api/predict", { method: "POST", body: fd });
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.detail || "Prediction failed");
+    const res = await fetch("/api/predict/stream", { method: "POST", body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || "Prediction failed");
+    }
+    const data = await consumeRun(res);
     showResult(data);
-    renderPipeline(data.trace);
     syncMapToRun(data);       // not awaited: the diagnosis should not wait on the map
   } catch (err) {
     $("predictError").textContent = err.message;
+    $("resultEmpty").textContent = "Awaiting input.";
+    failPipeline();
   } finally {
     btn.disabled = false; btn.textContent = "Run full pipeline";
   }
+}
+
+/* Read the NDJSON stream, drawing each stage the moment the server reports it.
+   The model finishes a warm run in about 20 ms, which would flash past before
+   anyone could read it, so each stage is held on screen for a minimum dwell.
+   The pacing is presentation; the durations printed on each card are the real
+   measurements the server sent. */
+const MIN_DWELL_MS = 190;
+
+async function consumeRun(res) {
+  beginPipeline();
+  const reader = res.body.getReader();
+  const dec = new TextDecoder();
+  let buf = "", result = null, shownAt = 0;
+
+  const paceIn = async (step) => {
+    const wait = Math.max(0, shownAt + MIN_DWELL_MS - performance.now());
+    if (wait) await new Promise((r) => setTimeout(r, wait));
+    pushStage(step);
+    shownAt = performance.now();
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+
+    let nl;
+    while ((nl = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const msg = JSON.parse(line);
+      if (msg.type === "step") await paceIn(msg.step);
+      else if (msg.type === "result") result = msg.result;
+      else if (msg.type === "error") throw new Error(msg.detail);
+    }
+  }
+  if (!result) throw new Error("Stream ended before the forecast arrived");
+
+  // Let the last stage hold its dwell, then close the trace out.
+  const wait = Math.max(0, shownAt + MIN_DWELL_MS - performance.now());
+  if (wait) await new Promise((r) => setTimeout(r, wait));
+  finishPipeline(result.trace);
+  return result;
 }
 
 /* The regional map answers "where else is this crop at risk on this date?", so
@@ -661,44 +727,81 @@ function showResult(d) {
 }
 
 /* ---------------------------------------------------------------- pipeline */
-/* The timings are the backend's measurements of the run that just finished.
-   Only the reveal is animated: stages appear in order at a fixed cadence so
-   the flow is readable from the back of a room, which is a presentation
-   choice and deliberately not tied to the real durations - a 0.6 ms head
-   would otherwise be invisible. */
-function renderPipeline(trace) {
-  const host = $("pipeline");
-  if (!trace || !trace.length) {
-    host.innerHTML = `<p class="placeholder">This run reported no trace.</p>`;
-    return;
-  }
-  const total = trace.reduce((a, t) => a + t.ms, 0);
-  const peak = Math.max(...trace.map((t) => t.ms), 1);
-
-  host.innerHTML = `
-    <div class="pipe-total">
-      <span>End to end</span><b>${total.toFixed(0)} ms</b>
-      <span class="pipe-n">${trace.length} stages</span>
+/* Built incrementally: beginPipeline lays out the shell, pushStage appends one
+   card as the server reports that block finishing, finishPipeline closes the
+   total once the forecast lands. Each card shows the duration the server
+   measured for that block. */
+function beginPipeline() {
+  $("pipeline").innerHTML = `
+    <div class="pipe-total running">
+      <span>Running</span><b id="pipeElapsed">0 ms</b>
+      <span class="pipe-n" id="pipeCount">stage 1&hellip;</span>
     </div>
-    <ol class="pipe-list">` + trace.map((t, i) => `
-      <li class="pipe-step" style="--i:${i}">
-        <div class="pipe-rail"><span class="pipe-dot">${i + 1}</span></div>
-        <div class="pipe-card">
-          <div class="pipe-head">
-            <span class="pipe-block">${esc(t.block)}</span>
-            <span class="pipe-name">${esc(t.name)}</span>
-            <span class="pipe-ms">${t.ms.toFixed(1)} ms</span>
-          </div>
-          <p class="pipe-detail">${esc(t.detail)}</p>
-          <div class="pipe-out"><span>&rarr;</span><code>${esc(t.output)}</code></div>
-          <div class="pipe-bar"><i style="width:${(t.ms / peak) * 100}%"></i></div>
-        </div>
-      </li>`).join("") + `</ol>`;
+    <ol class="pipe-list" id="pipeList"></ol>`;
+  pipeStarted = performance.now();
+  clearInterval(pipeTimer);
+  pipeTimer = setInterval(() => {
+    const el = $("pipeElapsed");
+    if (el) el.textContent = `${Math.round(performance.now() - pipeStarted)} ms`;
+  }, 60);
+}
 
-  // Stagger the reveal; the CSS animation is driven by --i on each step.
-  host.querySelectorAll(".pipe-step").forEach((el, i) => {
-    setTimeout(() => el.classList.add("in"), 90 + i * 150);
+function pushStage(t) {
+  const list = $("pipeList");
+  if (!list) return;
+
+  // The stage that was live becomes settled as soon as the next one starts.
+  const prev = list.querySelector(".pipe-step.live");
+  if (prev) prev.classList.remove("live");
+
+  const li = document.createElement("li");
+  li.className = "pipe-step live";
+  li.innerHTML = `
+    <div class="pipe-rail"><span class="pipe-dot">${t.index + 1}</span></div>
+    <div class="pipe-card">
+      <div class="pipe-head">
+        <span class="pipe-block">${esc(t.block)}</span>
+        <span class="pipe-name">${esc(t.name)}</span>
+        <span class="pipe-ms">${t.ms.toFixed(1)} ms</span>
+      </div>
+      <p class="pipe-detail">${esc(t.detail)}</p>
+      <div class="pipe-out"><span>&rarr;</span><code>${esc(t.output)}</code></div>
+      <div class="pipe-bar"><i data-ms="${t.ms}"></i></div>
+    </div>`;
+  list.appendChild(li);
+  requestAnimationFrame(() => li.classList.add("in"));
+
+  const count = $("pipeCount");
+  if (count) count.textContent = `stage ${t.index + 1}…`;
+}
+
+function finishPipeline(trace) {
+  clearInterval(pipeTimer);
+  const live = document.querySelector(".pipe-step.live");
+  if (live) live.classList.remove("live");
+
+  const total = (trace || []).reduce((a, t) => a + t.ms, 0);
+  const head = document.querySelector(".pipe-total");
+  if (head) {
+    head.classList.remove("running");
+    head.classList.add("done");
+    head.innerHTML = `<span>End to end</span><b>${total.toFixed(0)} ms</b>
+      <span class="pipe-n">${(trace || []).length} stages &middot; measured server-side</span>`;
+  }
+
+  // Scale the per-stage bars now that the slowest block is known.
+  const peak = Math.max(...(trace || []).map((t) => t.ms), 1);
+  document.querySelectorAll(".pipe-bar i").forEach((b) => {
+    b.style.width = `${(Number(b.dataset.ms) / peak) * 100}%`;
   });
+}
+
+function failPipeline() {
+  clearInterval(pipeTimer);
+  const head = document.querySelector(".pipe-total");
+  if (head) { head.classList.remove("running"); head.classList.add("failed"); }
+  const live = document.querySelector(".pipe-step.live");
+  if (live) live.classList.remove("live");
 }
 
 /* --------------------------------------------------------------------- map */

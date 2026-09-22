@@ -48,7 +48,7 @@ async function boot() {
   }
   renderMethod();
   await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops(),
-                     loadParameters()]);
+                     loadParameters(), loadProgress()]);
   await loadSamples();          // needs siteSelect to be populated first
   initTOC();
   bindDemoButtons(document);
@@ -334,7 +334,11 @@ function drawTrajectory(canvas, d) {
         fill: true, tension: .3, pointRadius: 4,
       }],
     },
-    options: { plugins: { legend: { display: false } }, scales: { y: { min: 0, max: 1 } } },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { min: 0, max: 1 } },
+    },
   });
 }
 
@@ -377,18 +381,80 @@ async function loadParameters() {
       `<p class="placeholder">Parameters unavailable &mdash; backend offline.</p>`;
     return;
   }
-  $("paramGroups").innerHTML = d.groups.map((g) => `
-    <div class="tile param-group" id="p-${esc(g.id)}">
-      <h3>${esc(g.title)}</h3>
-      <p class="micro">${esc(g.lead)}</p>
-      <div class="table-scroll">
-        <table class="ruled compact param-table">
-          <thead><tr><th>Parameter</th><th>Value</th><th>Why this value</th></tr></thead>
-          <tbody>${g.rows.map(([k, v, why]) => `
-            <tr><td>${esc(k)}</td><td class="pv">${fmt(v)}</td>
-                <td class="pw">${esc(why)}</td></tr>`).join("")}
-          </tbody>
-        </table>
+  /* Collapsed by default: 34 rows of justification is the right depth for a
+     question from the floor, and the wrong amount to scroll past to reach the
+     live demo. The first group stays open so the shape is obvious. */
+  $("paramGroups").innerHTML = d.groups.map((g, i) => `
+    <details class="param-group" id="p-${esc(g.id)}"${i === 0 ? " open" : ""}>
+      <summary>
+        <span class="pg-title">${esc(g.title)}</span>
+        <span class="pg-count">${g.rows.length}</span>
+      </summary>
+      <div class="pg-body">
+        <p class="micro">${esc(g.lead)}</p>
+        <div class="table-scroll">
+          <table class="ruled compact param-table">
+            <thead><tr><th>Parameter</th><th>Value</th><th>Why this value</th></tr></thead>
+            <tbody>${g.rows.map(([k, v, why]) => `
+              <tr><td>${esc(k)}</td><td class="pv">${fmt(v)}</td>
+                  <td class="pw">${esc(why)}</td></tr>`).join("")}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </details>`).join("");
+}
+
+/* ---------------------------------------------------------------- progress */
+/* The percentage is the backend's, computed from artefacts on disk. Nothing
+   here invents or rounds it up - this renders what /api/progress reports. */
+async function loadProgress() {
+  let d;
+  try { d = await getJSON("/api/progress"); } catch {
+    $("moduleList").innerHTML =
+      `<p class="placeholder">Status unavailable &mdash; backend offline.</p>`;
+    return;
+  }
+
+  $("progPct").textContent = `${d.percent}%`;
+  $("progSub").textContent = `${d.modules_done} of ${d.modules_total} modules`;
+
+  // r = 52 in the viewBox, so the full sweep is 2*pi*52.
+  const circ = 2 * Math.PI * 52;
+  const fill = $("donutFill");
+  fill.style.strokeDasharray = `${circ}`;
+  fill.style.strokeDashoffset = `${circ}`;
+  requestAnimationFrame(() => {
+    fill.style.strokeDashoffset = `${circ * (1 - d.percent / 100)}`;
+  });
+
+  const mast = $("mastPct");
+  mast.hidden = false;
+  mast.innerHTML = `Build complete: <b>${d.percent}%</b>`;
+
+  $("phaseBars").innerHTML = d.phases.map((p) => `
+    <div class="pbar">
+      <div class="pbar-head">
+        <span>${esc(p.phase)}</span>
+        <span class="pbar-n">${p.done}/${p.total} &middot; ${p.percent}%</span>
+      </div>
+      <div class="pbar-track">
+        <div class="pbar-fill${p.percent === 0 ? " none" : ""}"
+             style="width:${p.percent}%"></div>
+      </div>
+    </div>`).join("");
+
+  $("moduleList").innerHTML = d.modules.map((m) => `
+    <div class="mod ${esc(m.status)}">
+      <div class="mod-mark" aria-hidden="true">${m.done ? "&check;" : ""}</div>
+      <div class="mod-main">
+        <div class="mod-top">
+          <span class="mod-name">${esc(m.name)}</span>
+          <span class="mod-phase">${esc(m.phase)}</span>
+          <span class="mod-share">${m.share}%</span>
+        </div>
+        <p class="mod-what">${esc(m.what)}</p>
+        <code class="mod-files">${esc(m.modules)}</code>
       </div>
     </div>`).join("");
 }
@@ -508,6 +574,7 @@ async function runPredict() {
   if (!selectedFile) { $("predictError").textContent = "Select a leaf image first."; return; }
   const btn = $("predictBtn");
   btn.disabled = true; btn.textContent = "Running…";
+  $("pipeline").innerHTML = `<p class="placeholder">Running the pipeline&hellip;</p>`;
 
   const fd = new FormData();
   fd.append("image", selectedFile);
@@ -520,6 +587,7 @@ async function runPredict() {
     const data = await res.json();
     if (!res.ok) throw new Error(data.detail || "Prediction failed");
     showResult(data);
+    renderPipeline(data.trace);
     syncMapToRun(data);       // not awaited: the diagnosis should not wait on the map
   } catch (err) {
     $("predictError").textContent = err.message;
@@ -592,6 +660,47 @@ function showResult(d) {
       <td class="n">${(t.probability * 100).toFixed(2)}%</td></tr>`).join("") + "</tbody>";
 }
 
+/* ---------------------------------------------------------------- pipeline */
+/* The timings are the backend's measurements of the run that just finished.
+   Only the reveal is animated: stages appear in order at a fixed cadence so
+   the flow is readable from the back of a room, which is a presentation
+   choice and deliberately not tied to the real durations - a 0.6 ms head
+   would otherwise be invisible. */
+function renderPipeline(trace) {
+  const host = $("pipeline");
+  if (!trace || !trace.length) {
+    host.innerHTML = `<p class="placeholder">This run reported no trace.</p>`;
+    return;
+  }
+  const total = trace.reduce((a, t) => a + t.ms, 0);
+  const peak = Math.max(...trace.map((t) => t.ms), 1);
+
+  host.innerHTML = `
+    <div class="pipe-total">
+      <span>End to end</span><b>${total.toFixed(0)} ms</b>
+      <span class="pipe-n">${trace.length} stages</span>
+    </div>
+    <ol class="pipe-list">` + trace.map((t, i) => `
+      <li class="pipe-step" style="--i:${i}">
+        <div class="pipe-rail"><span class="pipe-dot">${i + 1}</span></div>
+        <div class="pipe-card">
+          <div class="pipe-head">
+            <span class="pipe-block">${esc(t.block)}</span>
+            <span class="pipe-name">${esc(t.name)}</span>
+            <span class="pipe-ms">${t.ms.toFixed(1)} ms</span>
+          </div>
+          <p class="pipe-detail">${esc(t.detail)}</p>
+          <div class="pipe-out"><span>&rarr;</span><code>${esc(t.output)}</code></div>
+          <div class="pipe-bar"><i style="width:${(t.ms / peak) * 100}%"></i></div>
+        </div>
+      </li>`).join("") + `</ol>`;
+
+  // Stagger the reveal; the CSS animation is driven by --i on each step.
+  host.querySelectorAll(".pipe-step").forEach((el, i) => {
+    setTimeout(() => el.classList.add("in"), 90 + i * 150);
+  });
+}
+
 /* --------------------------------------------------------------------- map */
 function initMap() {
   if (leafletMap) return;
@@ -600,6 +709,14 @@ function initMap() {
     attribution: "&copy; OpenStreetMap, &copy; CARTO", maxZoom: 18,
   }).addTo(leafletMap);
   mapLayers = L.layerGroup().addTo(leafletMap);
+
+  // Leaflet sizes its tile grid once and does not re-measure on its own, so a
+  // window resize leaves tiles hanging past the new viewport width.
+  let t;
+  window.addEventListener("resize", () => {
+    clearTimeout(t);
+    t = setTimeout(() => leafletMap.invalidateSize(), 160);
+  });
 }
 
 $("mapBtn").addEventListener("click", updateMap);

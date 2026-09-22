@@ -22,7 +22,8 @@
       </div>
     </div>
     <div class="mast-status">
-      <div id="sysStatus" class="sys">checking…</div>
+      <div id="mastPct" class="mast-pct" hidden></div>
+      <div id="sysStatus" class="sys">checking&hellip;</div>
       <div class="src">PlantVillage &middot; Open-Meteo ERA5</div>
     </div>
   </div>
@@ -35,6 +36,7 @@
   <div class="toc-head">Contents</div>
   <ol id="tocList">
     <li><a href="#s-abstract" class="active">Overview</a></li>
+    <li><a href="#s-status">Project Status</a></li>
     <li><a href="#s-survey">Literature Survey</a></li>
     <li><a href="#s-gap">Research Gap</a></li>
     <li><a href="#s-method">Methodology</a></li>
@@ -95,9 +97,36 @@
   </div>
 </section>
 
-<!-- 2. LITERATURE SURVEY -->
+<!-- 2. PROJECT STATUS -->
+<section id="s-status">
+  <h2><span class="num">2</span> Project Status</h2>
+  <p class="sub-lead">Completion is computed from artefacts that exist on disk &mdash;
+    trained weights, result tables, generated figures. A module counts as delivered
+    only when every file that proves it ran is present, so this figure cannot run
+    ahead of the work.</p>
+
+  <div class="status-head">
+    <div class="donut-wrap">
+      <svg class="donut" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="donut-track" cx="60" cy="60" r="52"></circle>
+        <circle class="donut-fill" cx="60" cy="60" r="52" id="donutFill"></circle>
+      </svg>
+      <div class="donut-label">
+        <div class="donut-pct" id="progPct">&mdash;</div>
+        <div class="donut-sub" id="progSub">of full scope</div>
+      </div>
+    </div>
+    <div class="phase-bars" id="phaseBars"></div>
+  </div>
+
+  <div id="moduleList" class="module-list">
+    <p class="placeholder">Loading module status&hellip;</p>
+  </div>
+</section>
+
+<!-- 3. LITERATURE SURVEY -->
 <section id="s-survey">
-  <h2><span class="num">2</span> Literature Survey</h2>
+  <h2><span class="num">3</span> Literature Survey</h2>
   <p class="sub-lead">
     18 works across transformer plant pathology, physics-informed modelling and
     graph learning. Each row states the gap it leaves &mdash; and runs the component
@@ -110,49 +139,38 @@
   </div>
 
   <div id="surveyList" class="survey-list">
-    <p class="loading">Loading survey…</p>
+    <p class="loading">Loading survey&hellip;</p>
   </div>
 </section>
 
-<!-- 3. RESEARCH GAP -->
+<!-- 4. RESEARCH GAP -->
 <section id="s-gap">
-  <h2><span class="num">3</span> Research Gap</h2>
-  <div class="grid-2 gap-grid" id="gapGrid">
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>Image-based detection and classification only</p>
-      <div class="anslabel">Addressed by</div><p>Classification is one of two heads; the second forecasts future risk</p>
-    </div>
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>Climate variables not integrated with visual features</p>
-      <div class="anslabel">Addressed by</div><p>FiLM-gated fusion lets climate modulate the visual representation</p>
-    </div>
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>Spread between connected farms not captured</p>
-      <div class="anslabel">Addressed by</div><p>Spatio-temporal graph with directed downwind edges, 37 districts</p>
-    </div>
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>Physics knowledge not unified with spatial prediction</p>
-      <div class="anslabel">Addressed by</div><p>Four agronomic constraints enter the objective as a soft physics loss</p>
-    </div>
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>Current identification, not 1&ndash;7 day forecasting</p>
-      <div class="anslabel">Addressed by</div><p>Autoregressive multi-horizon forecaster over 1, 3, 5 and 7 days</p>
-    </div>
-    <div class="gapcard">
-      <div class="gaplabel">Gap</div><p>No geospatial view of predicted affected areas</p>
-      <div class="anslabel">Addressed by</div><p>Regional risk map over the farm network (Section 7)</p>
-    </div>
+  <h2><span class="num">4</span> Research Gap</h2>
+  <p class="sub-lead">Six gaps consolidated from the survey, and the component that
+    closes each one.</p>
+  <div class="table-scroll">
+    <table class="ruled compact gap-table">
+      <thead><tr><th>Gap in the literature</th><th>Addressed by</th></tr></thead>
+      <tbody>
+        <tr><td>Image-based detection only</td><td>Classification is one of two heads; the second forecasts future risk</td></tr>
+        <tr><td>Climate not integrated with visual features</td><td>FiLM-gated fusion lets climate modulate the visual representation</td></tr>
+        <tr><td>Spread between farms not captured</td><td>Spatio-temporal graph with directed downwind edges, 37 districts</td></tr>
+        <tr><td>Physics knowledge not unified with prediction</td><td>Four agronomic constraints enter the objective as a soft physics loss</td></tr>
+        <tr><td>Identification, not 1&ndash;7 day forecasting</td><td>Multi-horizon forecaster over 1, 3, 5 and 7 days</td></tr>
+        <tr><td>No geospatial view of affected areas</td><td>Regional risk map over the farm network (Section 8.3)</td></tr>
+      </tbody>
+    </table>
   </div>
 </section>
 
-<!-- 4. METHODOLOGY -->
+<!-- 5. METHODOLOGY -->
 <section id="s-method">
-  <h2><span class="num">4</span> Methodology</h2>
+  <h2><span class="num">5</span> Methodology</h2>
   <div id="methodFlow" class="method-flow"></div>
 
   <div class="grid-2 demo-pair">
     <div class="tile">
-      <h3>4.1 &ensp;Agronomic knowledge base</h3>
+      <h3>5.1 &ensp;Agronomic knowledge base</h3>
       <ul class="tight">
         <li>Analytis beta model for temperature response</li>
         <li>Moisture term differs <b>per organism</b></li>
@@ -164,7 +182,7 @@
       </div>
     </div>
     <div class="tile">
-      <h3>4.2 &ensp;Physics-informed loss</h3>
+      <h3>5.2 &ensp;Physics-informed loss</h3>
       <ul class="tight">
         <li>Risk must rise with leaf wetness and humidity</li>
         <li>Dry air must suppress fungal risk</li>
@@ -179,9 +197,9 @@
   </div>
 </section>
 
-<!-- 5. DATASET -->
+<!-- 6. DATASET -->
 <section id="s-data">
-  <h2><span class="num">5</span> Dataset</h2>
+  <h2><span class="num">6</span> Dataset</h2>
 
   <div class="grid-2">
     <div>
@@ -199,11 +217,10 @@
       <h3>Verified, not asserted</h3>
       <ul class="tight">
         <li>Climate alone &rarr; <b>43.9%</b> on 38 classes</li>
-        <li>Random chance &rarr; 2.6%</li>
-        <li>Majority class &rarr; 10.4%</li>
+        <li>Random chance &rarr; 2.6% &middot; majority class &rarr; 10.4%</li>
       </ul>
       <p class="micro">Climate carries real signal, but the leaf image still does most
-        of the work &mdash; exactly what a genuine forecasting problem looks like.</p>
+        of the work &mdash; what a genuine forecasting problem looks like.</p>
     </div>
   </div>
 
@@ -221,23 +238,22 @@
   </div>
 </section>
 
-<!-- 6. PARAMETERS -->
+<!-- 7. PARAMETERS -->
 <section id="s-params">
-  <h2><span class="num">6</span> Parameters</h2>
-  <p class="sub-lead">Every quantity the system considers, and why it is set where it is.
-    This table is read live from <code>configs/default.yaml</code> and from the
-    fitted feature space &mdash; it reports the run you are looking at, not a
-    description of it.</p>
-  <div id="paramGroups" class="grid-2">
+  <h2><span class="num">7</span> Parameters</h2>
+  <p class="sub-lead">Read live from <code>configs/default.yaml</code> and the fitted
+    feature space, so it reports the run you are looking at. Open a group for the
+    reasoning behind each value.</p>
+  <div id="paramGroups" class="param-groups">
     <p class="placeholder">Loading parameters&hellip;</p>
   </div>
 </section>
 
-<!-- 7. LIVE SYSTEM -->
+<!-- 8. LIVE SYSTEM -->
 <section id="s-system">
-  <h2><span class="num">7</span> Live System</h2>
+  <h2><span class="num">8</span> Live System</h2>
 
-  <h3>7.1 &ensp;Single-observation inference</h3>
+  <h3>8.1 &ensp;Single-observation inference</h3>
   <div class="two-wide">
     <div class="box">
       <div class="box-title">Input</div>
@@ -269,28 +285,37 @@
       <div id="resultEmpty" class="placeholder">Awaiting input.</div>
       <div id="resultBody" hidden>
         <table class="kv">
-          <tr><th>Diagnosis</th><td id="diagName">—</td></tr>
-          <tr><th>Crop</th><td id="diagCrop">—</td></tr>
-          <tr><th>Confidence</th><td id="diagConf">—</td></tr>
+          <tr><th>Diagnosis</th><td id="diagName">&mdash;</td></tr>
+          <tr><th>Crop</th><td id="diagCrop">&mdash;</td></tr>
+          <tr><th>Confidence</th><td id="diagConf">&mdash;</td></tr>
         </table>
+
         <div class="sub">Forecast</div>
-        <div class="split">
-          <table class="ruled compact" id="horizonTable"></table>
-          <canvas id="riskChart" height="150"></canvas>
-        </div>
+        <table class="ruled compact" id="horizonTable"></table>
+        <div class="chart-box"><canvas id="riskChart"></canvas></div>
+
         <div class="sub">Advisory</div>
         <p class="advisory" id="advisory"></p>
+
         <div class="split">
-          <div><div class="sub">Driving weather</div>
+          <div><div class="sub flush">Driving weather</div>
             <table class="ruled compact" id="climateTable"></table></div>
-          <div><div class="sub">Alternatives</div>
+          <div><div class="sub flush">Alternatives</div>
             <table class="ruled compact" id="topk"></table></div>
         </div>
       </div>
     </div>
   </div>
 
-  <h3>7.2 &ensp;Regional risk map</h3>
+  <h3>8.2 &ensp;Pipeline trace</h3>
+  <p class="sub-lead">Every stage of the run above, in order, with the wall-clock cost
+    it took and the shape it handed on. Measured during the request &mdash; not a
+    diagram of one.</p>
+  <div id="pipeline" class="pipeline">
+    <p class="placeholder">Run the pipeline to trace it.</p>
+  </div>
+
+  <h3>8.3 &ensp;Regional risk map</h3>
   <div class="controls">
     <label for="mapCrop">Crop</label><select id="mapCrop"></select>
     <label for="mapDate">Date</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-07-15">
@@ -302,28 +327,27 @@
   <table class="ruled compact" id="mapTable"></table>
 </section>
 
-<!-- 8. RESULTS -->
+<!-- 9. RESULTS -->
 <section id="s-results">
-  <h2><span class="num">8</span> Results</h2>
+  <h2><span class="num">9</span> Results</h2>
 
-  <h3>8.1 &ensp;Vision transformer benchmark</h3>
+  <h3>9.1 &ensp;Vision transformer benchmark</h3>
   <p class="sub-lead">Identical downstream pipeline; only the frozen backbone changes.</p>
   <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code></td></tr></tbody></table>
 
-  <h3>8.2 &ensp;Component ablations</h3>
+  <h3>9.2 &ensp;Component ablations</h3>
   <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code></td></tr></tbody></table>
 
-  <h3>8.3 &ensp;Graph value as observations get sparse</h3>
+  <h3>9.3 &ensp;Graph value as observations get sparse</h3>
   <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code></td></tr></tbody></table>
 
-  <h3>8.4 &ensp;A negative result, reported</h3>
+  <h3>9.4 &ensp;A negative result, reported</h3>
   <div class="grid-2">
     <div class="callout compact">
       <b>The graph does not improve accuracy on this benchmark.</b>
       <ul class="tight">
         <li>Replacing it with a plain MLP <b>raises</b> macro-F1 and risk R&sup2;</li>
         <li>Held across 2 datasets, 5 sparsity levels, 2 encoders</li>
-        <li>A measured result, not a tuning failure</li>
       </ul>
     </div>
     <div class="tile">
@@ -334,15 +358,13 @@
         <li><b>Own state is near-sufficient.</b> A farm predicts its own risk in 3 days
           at r&nbsp;=&nbsp;0.83; neighbours reach 0.85 &mdash; better, but barely</li>
       </ul>
-      <p class="micro">The graph stays as the default because it is the architecture this
-        project set out to build, and its cost is now measured rather than assumed.</p>
     </div>
   </div>
 </section>
 
-<!-- 9. CONCLUSION -->
+<!-- 10. CONCLUSION -->
 <section id="s-conclusion">
-  <h2><span class="num">9</span> Conclusion</h2>
+  <h2><span class="num">10</span> Conclusion</h2>
   <div class="grid-2">
     <div class="tile">
       <h3>What worked</h3>
@@ -354,12 +376,12 @@
       </ul>
     </div>
     <div class="tile">
-      <h3>Future scope</h3>
+      <h3>Remaining work</h3>
       <ul class="tight">
-        <li>Drone and satellite multispectral imagery</li>
-        <li>Live forecast forcing instead of reanalysis</li>
-        <li>IoT canopy sensors for measured leaf wetness</li>
         <li>Validation against recorded outbreak records</li>
+        <li>Live forecast forcing instead of reanalysis</li>
+        <li>Farmer-facing mobile delivery</li>
+        <li>Manuscript write-up and submission</li>
       </ul>
     </div>
   </div>

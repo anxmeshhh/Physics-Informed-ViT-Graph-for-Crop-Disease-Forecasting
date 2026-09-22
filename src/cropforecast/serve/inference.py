@@ -14,6 +14,7 @@ from __future__ import annotations
 import io
 import json
 import pickle
+import time
 from dataclasses import dataclass
 from datetime import date as Date
 from pathlib import Path
@@ -48,6 +49,7 @@ class Prediction:
     site: dict
     date: str
     advisory: str
+    trace: list[dict]
 
 
 class ForecastService:
@@ -150,28 +152,81 @@ class ForecastService:
     @torch.no_grad()
     def predict(self, image: Image.Image, site_id: str, when: Date,
                 crop: str | None = None, top_k: int = 5) -> Prediction:
+        """Run the full path and record what each stage actually did.
+
+        The trace is measured, not narrated: every entry carries the wall-clock
+        cost of the block that produced it and the shape it handed on. The
+        dashboard animates these in order, so what the audience watches is the
+        run that just happened rather than a diagram of one.
+        """
         if site_id not in self.site_lookup:
             raise ValueError(f"Unknown site {site_id!r}")
         site = self.site_lookup[site_id]
 
+        trace: list[dict] = []
+        t0 = time.perf_counter()
+
+        def step(block, name, detail, output):
+            """Close one stage, timing it from the end of the previous one."""
+            nonlocal t0
+            now = time.perf_counter()
+            trace.append({
+                "block": block, "name": name, "detail": detail,
+                "output": output, "ms": round((now - t0) * 1000, 1),
+            })
+            t0 = now
+
+        # 1 - the farm's real recorded weather for that day
         row = self.climate_row(site_id, when)
+        step("Input", "Climate lookup",
+             f"ERA5 reanalysis for {site.name}, {site.state} on {when}",
+             f"1 site-day x {len(self.space.climate_cols)} columns")
+
+        # 2 - frozen transformer over the photograph
         vision = self._embed(image)
+        step("Vision", f"Frozen {self.model_cfg['backbone'].upper()} backbone",
+             "Leaf resized to 224px, normalised, encoded with no gradient",
+             f"{tuple(vision.shape)[-1]}-d embedding")
 
         # Crop is needed for the metadata encoding. If the caller does not say,
         # take the first crop this farm grows and correct it after the image has
         # been classified.
         crop_guess = crop or site.crops[0]
         climate_t, meta_t = self._tabular(row, crop_guess, when)
+        step("Climate", "Agro-meteorology + scaling",
+             "VPD, leaf wetness, GDD and rolling windows, then standardised",
+             f"{tuple(climate_t.shape)[-1]}-d climate | "
+             f"{tuple(meta_t.shape)[-1]}-d metadata")
 
+        # 3 - fusion, graph encoder, heads. Called as separate submodules rather
+        #     than through model.forward so each stage is timed on its own; the
+        #     composition is identical.
         empty_edges = torch.zeros((2, 0), dtype=torch.long, device=self.device)
-        out = self.model(vision, climate_t, meta_t, empty_edges, None)
+        fused = self.model.fusion(vision, climate_t, meta_t)
+        step("Fusion", "FiLM-gated fusion",
+             "Climate modulates the visual representation; streams share a width",
+             f"{tuple(fused.shape)[-1]}-d fused node")
 
-        probs = torch.softmax(out["class_logits"], dim=-1)[0]
+        z = self.model.encoder(fused, empty_edges, None)
+        step("Graph", f"{self.model_cfg['gnn_conv'].upper()} encoder, "
+             f"{self.model_cfg['gnn_layers']} layers",
+             "One observation has no neighbours, so the GNN runs on a 1-node "
+             "graph and falls back to its self-transform",
+             f"1 node, 0 edges -> {tuple(z.shape)[-1]}-d")
+
+        class_logits = self.model.classifier(z)
+        probs = torch.softmax(class_logits, dim=-1)[0]
         order = probs.argsort(descending=True)[:top_k]
         top = [{"class": self.class_names[int(i)],
                 "probability": float(probs[int(i)])} for i in order]
         best = self.class_names[int(order[0])]
         best_crop = best.split("___", 1)[0]
+        step("Diagnosis", "Classification head",
+             f"Softmax over {len(self.class_names)} classes",
+             f"{best.split('___', 1)[-1].replace('_', ' ')} "
+             f"@ {float(probs[int(order[0])]) * 100:.1f}%")
+
+        out = self.model.forecaster(z)
 
         # Re-run with the crop the image actually shows, so the metadata stream
         # is consistent with the diagnosis.
@@ -179,13 +234,23 @@ class ForecastService:
             c for s in SITES for c in s.crops
         }:
             climate_t, meta_t = self._tabular(row, best_crop, when)
-            out = self.model(vision, climate_t, meta_t, empty_edges, None)
+            z = self.model.encoder(
+                self.model.fusion(vision, climate_t, meta_t), empty_edges, None)
+            out = self.model.forecaster(z)
+            step("Consistency", "Re-run with the observed crop",
+                 f"Image says {best_crop}, metadata assumed {crop_guess}; "
+                 "the metadata stream is corrected and the pass repeated",
+                 f"crop = {best_crop}")
 
         risk = out["risk"][0].tolist()
         levels = out["level_logits"][0].softmax(-1)
         bands = [RISK_LABELS[int(l.argmax())] for l in levels]
         band_conf = [float(l.max()) for l in levels]
         sigma = (out["logvar"][0] * 0.5).exp().tolist()
+        step("Forecast", "Multi-horizon risk head",
+             f"Risk, band and uncertainty at +{', +'.join(str(h) for h in self.horizons)} days",
+             " | ".join(f"+{h}d {r * 100:.0f}% {b}"
+                        for h, r, b in zip(self.horizons, risk, bands)))
 
         clim = row.iloc[0]
         climate_summary = {
@@ -197,6 +262,11 @@ class ForecastService:
             "vpd_kPa": round(float(clim.vpd_kpa), 2),
             "gdd": round(float(clim.gdd), 1),
         }
+
+        note = self.advisory(best, bands, climate_summary)
+        step("Advisory", "Agronomic advisory",
+             "Diagnosis and forecast bands turned into an action note",
+             note.split(".")[0] + ".")
 
         return Prediction(
             disease=best,
@@ -213,7 +283,8 @@ class ForecastService:
                   "lat": site.lat, "lon": site.lon, "soil": site.soil_type,
                   "agro_zone": site.agro_zone},
             date=str(when),
-            advisory=self.advisory(best, bands, climate_summary),
+            advisory=note,
+            trace=trace,
         )
 
     # -- agronomic advisory -------------------------------------------------

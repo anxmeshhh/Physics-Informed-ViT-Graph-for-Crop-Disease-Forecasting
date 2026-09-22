@@ -320,6 +320,170 @@ def parameters():
     return {"config_file": "configs/default.yaml", "groups": groups}
 
 
+@app.get("/api/progress")
+def progress():
+    """Project completion, computed from artefacts that actually exist.
+
+    Each module names the files that prove it ran. A module is only counted as
+    delivered if every one of those files is on disk, so the percentage on the
+    page cannot drift ahead of the work - deleting a report demotes its module
+    on the next refresh. Weights are relative effort, not file counts.
+    """
+    root = PROJECT_ROOT
+    ck = Path(_cfg.paths.checkpoints)
+    rp = Path(_cfg.paths.reports)
+    fg = Path(_cfg.paths.figures)
+    pr = Path(_cfg.paths.processed)
+
+    def have(*rel: Path) -> bool:
+        return all(Path(r).exists() for r in rel)
+
+    modules = [
+        {
+            "id": "data", "phase": "Data", "weight": 10,
+            "name": "Dataset construction",
+            "what": "54,305 leaf images paired to 37 real districts and real ERA5 "
+                    "weather, by growing season and recorded conditions",
+            "modules": "data/farms.py, climate.py, plantvillage.py, assign.py",
+            "done": have(pr / "observations.parquet", pr / "climate_features.parquet",
+                         rp / "stage1_class_table.csv"),
+        },
+        {
+            "id": "split", "phase": "Data", "weight": 5,
+            "name": "Leak-free evaluation protocol",
+            "what": "Leaf-disjoint splits; a random split leaks 35,246 of 54,305 "
+                    "images because each leaf is photographed 2.65x",
+            "modules": "data/splits.py",
+            "done": have(pr / "observations.parquet", rp / "stage1_assignment_report.csv"),
+        },
+        {
+            "id": "agromet", "phase": "Features", "weight": 6,
+            "name": "Agro-meteorological features",
+            "what": "VPD, leaf wetness, GDD, dewpoint depression and rolling "
+                    "windows - the quantities pathologists use, not raw weather",
+            "modules": "features/agromet.py, features/tabular.py",
+            "done": have(pr / "climate_features.parquet", ck / "feature_space.pkl"),
+        },
+        {
+            "id": "vision", "phase": "Model", "weight": 8,
+            "name": "Vision transformer benchmark",
+            "what": "ViT-B/16, Swin-T, DINOv2 and DeiT-S compared under one "
+                    "identical downstream pipeline",
+            "modules": "models/backbones.py",
+            "done": have(rp / "stage3_backbone_benchmark.csv"),
+        },
+        {
+            "id": "graph", "phase": "Model", "weight": 7,
+            "name": "Spatio-temporal graph",
+            "what": "KNN + radius + wind-aware directed edges over the farm "
+                    "network, built per crop and per date window",
+            "modules": "graph/build.py",
+            "done": have(root / "src/cropforecast/graph/build.py", ck / "final_model.pt"),
+        },
+        {
+            "id": "physics", "phase": "Model", "weight": 9,
+            "name": "Physics layer",
+            "what": "Pathogen knowledge base, four soft agronomic constraints in "
+                    "the loss, and a wind-driven epidemic simulation",
+            "modules": "physics/epidemiology.py, losses.py, contagion.py",
+            "done": have(pr / "outbreaks.parquet",
+                         root / "src/cropforecast/physics/losses.py"),
+        },
+        {
+            "id": "net", "phase": "Model", "weight": 10,
+            "name": "Fusion + GNN + multi-horizon heads",
+            "what": "FiLM-gated fusion of three streams, GraphSAGE encoder, and "
+                    "heads for 38-class diagnosis plus 1/3/5/7-day risk",
+            "modules": "models/fusion.py, gnn.py, heads.py, full_model.py",
+            "done": have(ck / "final_model.pt", ck / "class_names.json"),
+        },
+        {
+            "id": "train", "phase": "Results", "weight": 9,
+            "name": "Training and ablation study",
+            "what": "Full model plus no-graph, no-physics, no-climate, no-vision, "
+                    "GCN and leaky-split configurations, each trained and scored",
+            "modules": "train/prepare.py, train/trainer.py",
+            "done": have(rp / "stage4_ablations.csv", rp / "stage4_history.csv"),
+        },
+        {
+            "id": "sparse", "phase": "Results", "weight": 4,
+            "name": "Observation-sparsity study",
+            "what": "What the graph is worth as 0-90% of farms lose their "
+                    "photograph, for both GraphSAGE and a no-graph MLP",
+            "modules": "scripts/08_missing_data.py",
+            "done": have(rp / "stage8_missing_data.csv"),
+        },
+        {
+            "id": "explain", "phase": "Results", "weight": 6,
+            "name": "Explainability",
+            "what": "Grad-CAM and attention rollout on the leaf, integrated "
+                    "gradients and SHAP on the weather, attribution on the graph",
+            "modules": "explain/vision.py, explain/attribution.py",
+            "done": have(rp / "stage5_shap.csv", rp / "stage5_integrated_gradients.csv",
+                         fg / "explain_vision.png"),
+        },
+        {
+            "id": "serve", "phase": "Delivery", "weight": 4,
+            "name": "Live system and dashboard",
+            "what": "FastAPI service, single-image inference with a measured "
+                    "stage trace, regional risk map, and runnable survey demos",
+            "modules": "serve/api.py, inference.py, web/",
+            "done": have(root / "src/cropforecast/serve/inference.py",
+                         WEB_DIR / "index.html"),
+        },
+        {
+            "id": "field", "phase": "Remaining", "weight": 10,
+            "name": "Field validation",
+            "what": "Recorded outbreak surveillance in place of the simulated "
+                    "epidemic, and leaves photographed in the field rather than "
+                    "against a uniform background",
+            "modules": "not started",
+            "done": False,
+        },
+        {
+            "id": "deploy", "phase": "Remaining", "weight": 6,
+            "name": "Farmer-facing deployment",
+            "what": "Model compression and a mobile or SMS delivery path, with "
+                    "live forecast forcing instead of reanalysis",
+            "modules": "not started",
+            "done": False,
+        },
+        {
+            "id": "paper", "phase": "Remaining", "weight": 6,
+            "name": "Write-up and submission",
+            "what": "The leakage finding and the measured cost of the graph are "
+                    "both publishable; the manuscript is not yet drafted",
+            "modules": "not started",
+            "done": False,
+        },
+    ]
+
+    total = sum(m["weight"] for m in modules)
+    earned = sum(m["weight"] for m in modules if m["done"])
+    for m in modules:
+        m["status"] = "delivered" if m["done"] else "planned"
+        m["share"] = round(100 * m["weight"] / total, 1) if total else 0.0
+
+    phases: dict[str, dict] = {}
+    for m in modules:
+        ph = phases.setdefault(m["phase"], {"phase": m["phase"], "w": 0, "e": 0,
+                                            "done": 0, "total": 0})
+        ph["w"] += m["weight"]
+        ph["e"] += m["weight"] if m["done"] else 0
+        ph["total"] += 1
+        ph["done"] += 1 if m["done"] else 0
+    for ph in phases.values():
+        ph["percent"] = round(100 * ph["e"] / ph["w"]) if ph["w"] else 0
+
+    return {
+        "percent": round(100 * earned / total) if total else 0,
+        "modules_done": sum(1 for m in modules if m["done"]),
+        "modules_total": len(modules),
+        "phases": list(phases.values()),
+        "modules": modules,
+    }
+
+
 @app.get("/api/climate/{site_id}")
 def climate(site_id: str, start: str = "2023-01-01", end: str = "2023-12-31"):
     svc = service()

@@ -65,7 +65,7 @@ body {
   padding-top: 34px; padding-bottom: 70px;
 }
 @media (max-width: 1080px) {
-  .layout { grid-template-columns: 1fr; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
   .toc { position: static !important; }
 }
 
@@ -101,11 +101,11 @@ ul.tight li { margin: 7px 0; color: var(--ink-soft); }
 ul.tight li b { color: var(--ink); }
 
 /* ---------------- grids ---------------- */
-.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 20px; }
-.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 26px; }
-.two-wide { display: grid; grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.4fr); gap: 24px; margin-bottom: 34px; }
-@media (max-width: 1000px) { .two-wide { grid-template-columns: 1fr; } }
-.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 20px; align-items: start; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 20px; }
+.grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 20px; margin-bottom: 26px; }
+.two-wide { display: grid; grid-template-columns: minmax(320px, 0.85fr) minmax(420px, 1.4fr); gap: 24px; margin-bottom: 34px; min-width: 0; }
+@media (max-width: 1000px) { .two-wide { grid-template-columns: minmax(0, 1fr); } }
+.split { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(230px, 100%), 1fr)); gap: 20px; align-items: start; }
 .demo-pair { margin-top: 24px; }
 
 .tile { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 20px 22px; }
@@ -121,14 +121,6 @@ ul.tight li b { color: var(--ink); }
 .callout.compact { font-size: 14px; }
 .callout ul.tight { margin-top: 10px; }
 
-/* ---------------- gap cards ---------------- */
-.gapcard { background: var(--paper); border: 1px solid var(--rule); border-radius: 4px; padding: 18px 20px; }
-.gapcard p { margin: 0 0 14px; font-size: 14px; color: var(--ink-soft); }
-.gapcard p:last-child { margin-bottom: 0; color: var(--ink); }
-.gaplabel, .anslabel { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700; margin-bottom: 5px; }
-.gaplabel { color: var(--accent); }
-.anslabel { color: var(--ok); }
-
 /* ---------------- tables ---------------- */
 table.ruled, table.kv { width: 100%; border-collapse: collapse; font-size: 13.5px; margin: 0 0 4px; }
 table.ruled th { text-align: left; font-weight: 650; color: var(--navy); border-bottom: 2px solid var(--navy); padding: 10px 12px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; white-space: nowrap; }
@@ -137,7 +129,7 @@ table.ruled tbody tr:hover td { background: var(--cream); }
 table.ruled.compact th, table.ruled.compact td { padding: 7px 10px; }
 table.ruled tr.best td { background: #eef7f1; font-weight: 650; }
 td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
-.table-scroll { overflow-x: auto; }
+.table-scroll { overflow-x: auto; min-width: 0; }
 
 table.kv th { text-align: left; width: 120px; padding: 8px 12px 8px 0; color: var(--ink-faint); font-weight: 650; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--rule-soft); }
 table.kv td { padding: 8px 0; border-bottom: 1px solid var(--rule-soft); font-size: 15px; }
@@ -239,14 +231,185 @@ select:focus, input:focus { outline: none; border-color: var(--navy); }
 .leaflet-popup-content { font-family: var(--sans); font-size: 13px; }
 
 /* ---------------- parameters ---------------- */
-/* Wider minimum than .grid-2: each tile carries a three-column table, and the
-   rationale column becomes unreadable below ~460px. */
-#paramGroups { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
-.param-group .micro { margin: 0 0 14px; }
+/* Collapsed groups: the justification stays available for a question from the
+   floor, without putting 34 rows between the reader and the live demo. */
+.param-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; }
+.param-group { border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); }
+.param-group > summary {
+  display: flex; align-items: center; gap: 12px; cursor: pointer;
+  padding: 13px 18px; font-size: 14px; font-weight: 650; color: var(--navy);
+  list-style: none;
+}
+.param-group > summary::-webkit-details-marker { display: none; }
+.param-group > summary::before {
+  content: "+"; font-family: var(--mono); font-size: 15px; color: var(--ink-faint);
+  width: 14px; flex: none;
+}
+.param-group[open] > summary::before { content: "\2212"; }
+.param-group[open] > summary { border-bottom: 1px solid var(--rule-soft); }
+.pg-title { flex: 1; min-width: 0; }
+.pg-count {
+  font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+  background: var(--cream); border: 1px solid var(--rule);
+  border-radius: 999px; padding: 1px 9px;
+}
+.pg-body { padding: 14px 18px 16px; min-width: 0; }
+.pg-body .micro { margin: 0 0 12px; }
 .param-table { width: 100%; }
 .param-table td { vertical-align: top; }
 .param-table .pv { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--navy); }
 .param-table .pw { color: var(--ink-soft); font-size: 12.5px; }
+
+/* ---------------- research gap ---------------- */
+.gap-table td { vertical-align: top; }
+.gap-table td:first-child { width: 34%; font-weight: 600; color: var(--ink); }
+.gap-table td:last-child { color: var(--ink-soft); }
+
+/* ---------------- project status ---------------- */
+.mast-pct {
+  display: inline-block; font-size: 12.5px; padding: 6px 14px; margin-bottom: 8px;
+  border-radius: 999px; background: var(--navy-soft);
+  border: 1px solid #cfdcee; color: var(--navy);
+}
+.mast-pct b { font-variant-numeric: tabular-nums; }
+
+.status-head {
+  display: grid; grid-template-columns: 180px minmax(0, 1fr); gap: 32px;
+  align-items: center; margin-bottom: 26px;
+}
+@media (max-width: 760px) { .status-head { grid-template-columns: minmax(0, 1fr); justify-items: center; } }
+
+.donut-wrap { position: relative; width: 180px; height: 180px; }
+.donut { width: 100%; height: 100%; transform: rotate(-90deg); }
+.donut circle { fill: none; stroke-width: 11; }
+.donut-track { stroke: var(--rule-soft); }
+.donut-fill {
+  stroke: var(--navy); stroke-linecap: round;
+  transition: stroke-dashoffset 1.1s cubic-bezier(.4, 0, .2, 1);
+}
+.donut-label {
+  position: absolute; inset: 0; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; text-align: center;
+}
+.donut-pct {
+  font-family: var(--serif); font-size: 40px; font-weight: 700;
+  color: var(--navy); line-height: 1; font-variant-numeric: tabular-nums;
+}
+.donut-sub { font-size: 11.5px; color: var(--ink-faint); margin-top: 6px; max-width: 14ch; }
+
+.phase-bars { display: grid; gap: 14px; }
+.pbar-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-size: 13px; margin-bottom: 5px;
+}
+.pbar-head span:first-child { font-weight: 650; color: var(--ink); }
+.pbar-n { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint); }
+.pbar-track { height: 7px; background: var(--rule-soft); border-radius: 999px; overflow: hidden; }
+.pbar-fill {
+  height: 100%; background: var(--navy); border-radius: 999px;
+  transition: width .9s cubic-bezier(.4, 0, .2, 1);
+}
+.pbar-fill.none { background: var(--rule); }
+
+.module-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 12px; }
+.mod {
+  display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 14px;
+  border: 1px solid var(--rule); border-radius: 4px;
+  padding: 14px 16px; background: var(--paper);
+}
+.mod.planned { background: var(--cream); border-style: dashed; }
+.mod-mark {
+  width: 22px; height: 22px; border-radius: 50%; margin-top: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: #fff; background: var(--ok);
+}
+.mod.planned .mod-mark { background: transparent; border: 1.5px dashed var(--ink-faint); }
+.mod-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
+.mod-name { font-weight: 650; font-size: 14px; color: var(--navy); }
+.mod-phase {
+  font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+  color: var(--ink-faint); border: 1px solid var(--rule);
+  border-radius: 3px; padding: 1px 6px;
+}
+.mod-share { margin-left: auto; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+.mod-what { margin: 0 0 7px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+.mod-files { font-family: var(--mono); font-size: 11.5px; color: var(--ink-faint);
+  overflow-wrap: anywhere; }
+
+/* ---------------- pipeline trace ---------------- */
+.pipe-total {
+  display: flex; align-items: baseline; gap: 12px;
+  border: 1px solid var(--rule); border-radius: 4px; background: var(--paper);
+  padding: 11px 16px; margin-bottom: 14px; font-size: 13px; color: var(--ink-soft);
+}
+.pipe-total b { font-family: var(--mono); font-size: 16px; color: var(--navy); }
+.pipe-n { margin-left: auto; font-size: 12px; color: var(--ink-faint); }
+
+.pipe-list { list-style: none; margin: 0; padding: 0; }
+.pipe-step {
+  display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 14px;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .38s ease, transform .38s ease;
+}
+.pipe-step.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .pipe-step { opacity: 1; transform: none; transition: none; }
+}
+
+/* The rail draws the connector between consecutive stages. */
+.pipe-rail { position: relative; display: flex; justify-content: center; }
+.pipe-rail::before {
+  content: ""; position: absolute; top: 0; bottom: -14px; width: 1px;
+  background: var(--rule);
+}
+.pipe-step:last-child .pipe-rail::before { display: none; }
+.pipe-dot {
+  position: relative; z-index: 1; width: 26px; height: 26px; margin-top: 12px;
+  border-radius: 50%; background: var(--navy); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--mono); font-size: 12px; font-weight: 700;
+}
+.pipe-card {
+  border: 1px solid var(--rule); border-radius: 4px; background: var(--paper);
+  padding: 12px 16px; margin-bottom: 14px;
+}
+.pipe-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.pipe-block {
+  font-size: 10px; letter-spacing: .12em; text-transform: uppercase; font-weight: 700;
+  color: var(--navy); background: var(--navy-soft);
+  border-radius: 3px; padding: 2px 7px;
+}
+.pipe-name { font-weight: 650; font-size: 14px; }
+.pipe-ms {
+  margin-left: auto; font-family: var(--mono); font-size: 12.5px;
+  color: var(--ink-faint); font-variant-numeric: tabular-nums;
+}
+.pipe-detail { margin: 6px 0 8px; font-size: 13px; color: var(--ink-soft); line-height: 1.5; }
+.pipe-out { display: flex; gap: 8px; align-items: baseline; font-size: 12.5px; }
+.pipe-out span { color: var(--ink-faint); }
+.pipe-out code { font-family: var(--mono); font-size: 12px; color: var(--navy);
+  overflow-wrap: anywhere; min-width: 0; }
+.pipe-bar { height: 3px; background: var(--rule-soft); border-radius: 999px; margin-top: 10px; }
+.pipe-bar i { display: block; height: 100%; background: var(--navy); border-radius: 999px; opacity: .55; }
+
+/* ---------------- forecast chart ---------------- */
+/* Full width under the horizon table. It previously shared a .split row with
+   that table and was squeezed against the right edge of the output panel. */
+.chart-box { position: relative; height: 200px; margin: 14px 0 4px; width: 100%; }
+.chart-box canvas { width: 100% !important; height: 100% !important; }
+.sub.flush { margin-top: 0; }
+/* The advisory has no bottom margin of its own, so the pair of tables that
+   follows it needs the separation. */
+#resultBody .split { margin-top: 20px; }
+
+/* ---------------- narrow screens ---------------- */
+/* Several tables are written straight into a bare <table> by app.js, with no
+   .table-scroll wrapper to clip them. Below the layout breakpoint they become
+   their own scroll container so a wide row scrolls itself instead of widening
+   the page. */
+@media (max-width: 900px) {
+  table.ruled, table.kv { display: block; overflow-x: auto; max-width: 100%; }
+}
 
 /* ---------------- footer ---------------- */
 .foot { background: var(--paper); border-top: 1px solid var(--rule); padding: 20px 0; font-size: 12.5px; color: var(--ink-faint); }

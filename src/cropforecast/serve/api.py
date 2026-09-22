@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import io
 import json
+import pickle
 import sys
 from datetime import date as Date
 from datetime import datetime
@@ -165,6 +166,158 @@ def summary():
         if path.exists():
             out[key] = pd.read_csv(path).round(4).to_dict(orient="records")
     return out
+
+
+@app.get("/api/parameters")
+def parameters():
+    """Every parameter the system considers, assembled from the live config.
+
+    Written out by hand this would drift away from the run the moment anyone
+    edited the YAML, so each row is read from ``configs/default.yaml`` and from
+    the fitted feature space instead. What the page shows is what the pipeline
+    actually used.
+    """
+    b, g, m = _cfg.backbones, _cfg.graph, _cfg.model
+    p, t = _cfg.physics, _cfg.training
+    primary = b[b.primary]
+    frozen = "frozen" if b.frozen else "fine-tuned"
+
+    # Stream widths are only known once stage 4 has fitted the feature space.
+    climate_dim: int | str = "pending stage 4"
+    meta_dim: int | str = "pending stage 4"
+    space_path = Path(_cfg.paths.checkpoints) / "feature_space.pkl"
+    if space_path.exists():
+        try:
+            with open(space_path, "rb") as fh:
+                space = pickle.load(fh)
+            climate_dim, meta_dim = space.climate_dim, space.meta_dim
+        except Exception:                                    # noqa: BLE001
+            pass
+
+    horizons = "/".join(str(h) for h in m.heads.horizons)
+    windows = "/".join(str(w) for w in _cfg.climate.rolling_windows)
+
+    groups = [
+        {
+            "id": "observed",
+            "title": "What the model observes",
+            "lead": "Three streams, per farm per day. Every one is ablated "
+                    "separately, so its contribution is measured rather than assumed.",
+            "rows": [
+                ["Leaf image", f"1 RGB photo, {primary.image_size}px",
+                 f"Encoded by {b.primary} ({frozen}) to a {primary.dim}-d embedding"],
+                ["Raw weather variables", f"{len(_cfg.climate.daily_vars)} daily",
+                 "ERA5 reanalysis via Open-Meteo, recorded at that farm on that date"],
+                ["Derived agro-meteorology",
+                 "VPD, leaf wetness, GDD, dewpoint depression, diurnal range, wind u/v",
+                 "The quantities plant pathologists use, not raw weather"],
+                ["Temporal aggregation", f"{windows}-day rolling windows",
+                 f"Disease responds to accumulated conditions, not one day; "
+                 f"{_cfg.climate.lookback_days}-day lookback"],
+                ["Climate stream width", climate_dim,
+                 "Raw + derived + rolling, after excluding targets and identifiers"],
+                ["Farm metadata",
+                 "lat, lon, elevation, crop, soil type, agro-zone, season sin/cos",
+                 f"{meta_dim}-d after scaling and one-hot encoding"],
+            ],
+        },
+        {
+            "id": "neighbourhood",
+            "title": "How a neighbourhood is defined",
+            "lead": "Which other farms a node is allowed to see. These decide what "
+                    "the graph can possibly learn.",
+            "rows": [
+                ["Neighbours per farm", f"k = {g.k_neighbours}",
+                 f"KNN, capped at {g.max_edges_per_node} edges per node"],
+                ["Search radius", f"{g.radius_km:g} km",
+                 "Indian production belts are far apart; calibrated for connectivity"],
+                ["Temporal window", f"+/- {g.time_window_days} days",
+                 "Edges are spatio-temporal, not purely spatial"],
+                ["Wind-aware edges", "on" if g.wind_aware else "off",
+                 f"Directed downwind edge when cos(angle) > "
+                 f"{g.wind_alignment_threshold}, for spore transport"],
+                ["Crop isolation", "on" if g.same_crop else "off",
+                 "A pathogen does not cross between different crops"],
+                ["Isolation floor", f"min {g.min_neighbours} neighbours",
+                 "KNN fallback so no farm is ever left without context"],
+            ],
+        },
+        {
+            "id": "architecture",
+            "title": "Architecture and capacity",
+            "lead": "Everything downstream of the frozen backbone is trained, and "
+                    "kept deliberately small - the features are already strong.",
+            "rows": [
+                ["Fusion width", f"{m.fusion.hidden_dim}-d",
+                 f"Common width for all three streams; dropout {m.fusion.dropout}"],
+                ["Graph encoder", m.gnn.conv,
+                 "sage | gcn | gat - all three implemented, all reported"],
+                ["Message-passing depth", f"{m.gnn.num_layers} layers",
+                 "2 hops; 3 over-smooths"],
+                ["GNN width", f"{m.gnn.hidden_dim}-d",
+                 f"Dropout {m.gnn.dropout}; {m.gnn.heads} attention heads if GAT"],
+                ["Classification head", f"{m.heads.num_classes} classes",
+                 "The diagnosis for the leaf in front of you"],
+                ["Forecast horizons", f"{horizons} days",
+                 f"Multi-horizon head, {m.heads.risk_levels} risk bands"],
+            ],
+        },
+        {
+            "id": "physics",
+            "title": "Physics constraints",
+            "lead": f"Total weight lambda = {p.lambda_physics}. The loss enforces "
+                    "direction only - never the quantitative knowledge base - so the "
+                    "network still has to learn the relationship from data.",
+            "rows": [
+                ["Infection pressure", f"{p.weights.infection_pressure:g}",
+                 "Risk must not fall as leaf wetness and humidity rise"],
+                ["Dry suppression", f"{p.weights.dry_suppression:g}",
+                 "Risk stays bounded under strongly drying air (VPD > 1.5 kPa)"],
+                ["Diffusion", f"{p.weights.diffusion:g}",
+                 "Risk varies smoothly across connected farms (Dirichlet energy)"],
+                ["Monotonic horizon", f"{p.weights.monotonic_horizon:g}",
+                 "Forecast uncertainty must not shrink as the horizon lengthens"],
+            ],
+        },
+        {
+            "id": "training",
+            "title": "Training protocol",
+            "lead": "Full-batch over the graph. The split policy matters more here "
+                    "than any hyperparameter.",
+            "rows": [
+                ["Split", "leaf-disjoint",
+                 "0 leaf groups span train and test; a random split leaks 65% of images"],
+                ["Epochs", t.epochs, "Full-batch graph training, ~0.2 s per epoch"],
+                ["Learning rate", f"{t.lr:g}", f"Weight decay {t.weight_decay:g}"],
+                ["Batch size", t.batch_size,
+                 "Feature extraction; the GNN itself is full-batch"],
+                ["Mixed precision", "on" if t.amp else "off", "Fits in 6 GB of VRAM"],
+                ["Seed", _cfg.project.seed,
+                 "Assignment, splits and initialisation are all seeded"],
+                ["Study period",
+                 f"{_cfg.data.study_years[0]}-{_cfg.data.study_years[-1]}",
+                 f"{_cfg.data.season_window_days}-day growing-season sampling window"],
+            ],
+        },
+        {
+            "id": "reported",
+            "title": "What we report",
+            "lead": "Chosen before the results were in. Macro-F1 rather than accuracy, "
+                    "because the 38 classes are heavily imbalanced.",
+            "rows": [
+                ["Macro-F1", "38-class diagnosis",
+                 "Unweighted mean over classes; the majority class is only 10.4%"],
+                ["Accuracy", "38-class diagnosis", "Reported alongside, never alone"],
+                ["Risk R-squared", f"per horizon ({horizons} d)",
+                 "Variance in future risk that the model explains"],
+                ["Risk MAE", f"per horizon ({horizons} d)",
+                 "Absolute error on the 0-1 risk"],
+                ["Band accuracy", f"{m.heads.risk_levels} bands",
+                 "What a farmer actually acts on: low / medium / high"],
+            ],
+        },
+    ]
+    return {"config_file": "configs/default.yaml", "groups": groups}
 
 
 @app.get("/api/climate/{site_id}")

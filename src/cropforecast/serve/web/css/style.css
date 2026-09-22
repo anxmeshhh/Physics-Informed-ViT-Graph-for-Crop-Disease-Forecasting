@@ -238,6 +238,16 @@ select:focus, input:focus { outline: none; border-color: var(--navy); }
 .sw.low { background: var(--low); } .sw.med { background: var(--med); } .sw.high { background: var(--high); }
 .leaflet-popup-content { font-family: var(--sans); font-size: 13px; }
 
+/* ---------------- parameters ---------------- */
+/* Wider minimum than .grid-2: each tile carries a three-column table, and the
+   rationale column becomes unreadable below ~460px. */
+#paramGroups { grid-template-columns: repeat(auto-fit, minmax(460px, 1fr)); }
+.param-group .micro { margin: 0 0 14px; }
+.param-table { width: 100%; }
+.param-table td { vertical-align: top; }
+.param-table .pv { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; color: var(--navy); }
+.param-table .pw { color: var(--ink-soft); font-size: 12.5px; }
+
 /* ---------------- footer ---------------- */
 .foot { background: var(--paper); border-top: 1px solid var(--rule); padding: 20px 0; font-size: 12.5px; color: var(--ink-faint); }
 .foot .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; }

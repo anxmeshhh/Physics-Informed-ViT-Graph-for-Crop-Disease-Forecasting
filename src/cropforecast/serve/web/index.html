@@ -39,6 +39,7 @@
     <li><a href="#s-gap">Research Gap</a></li>
     <li><a href="#s-method">Methodology</a></li>
     <li><a href="#s-data">Dataset</a></li>
+    <li><a href="#s-params">Parameters</a></li>
     <li><a href="#s-system">Live System</a></li>
     <li><a href="#s-results">Results</a></li>
     <li><a href="#s-conclusion">Conclusion</a></li>
@@ -139,7 +140,7 @@
     </div>
     <div class="gapcard">
       <div class="gaplabel">Gap</div><p>No geospatial view of predicted affected areas</p>
-      <div class="anslabel">Addressed by</div><p>Regional risk map over the farm network (Section 6)</p>
+      <div class="anslabel">Addressed by</div><p>Regional risk map over the farm network (Section 7)</p>
     </div>
   </div>
 </section>
@@ -220,11 +221,23 @@
   </div>
 </section>
 
-<!-- 6. LIVE SYSTEM -->
-<section id="s-system">
-  <h2><span class="num">6</span> Live System</h2>
+<!-- 6. PARAMETERS -->
+<section id="s-params">
+  <h2><span class="num">6</span> Parameters</h2>
+  <p class="sub-lead">Every quantity the system considers, and why it is set where it is.
+    This table is read live from <code>configs/default.yaml</code> and from the
+    fitted feature space &mdash; it reports the run you are looking at, not a
+    description of it.</p>
+  <div id="paramGroups" class="grid-2">
+    <p class="placeholder">Loading parameters&hellip;</p>
+  </div>
+</section>
 
-  <h3>6.1 &ensp;Single-observation inference</h3>
+<!-- 7. LIVE SYSTEM -->
+<section id="s-system">
+  <h2><span class="num">7</span> Live System</h2>
+
+  <h3>7.1 &ensp;Single-observation inference</h3>
   <div class="two-wide">
     <div class="box">
       <div class="box-title">Input</div>
@@ -277,7 +290,7 @@
     </div>
   </div>
 
-  <h3>6.2 &ensp;Regional risk map</h3>
+  <h3>7.2 &ensp;Regional risk map</h3>
   <div class="controls">
     <label for="mapCrop">Crop</label><select id="mapCrop"></select>
     <label for="mapDate">Date</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-07-15">
@@ -289,21 +302,21 @@
   <table class="ruled compact" id="mapTable"></table>
 </section>
 
-<!-- 7. RESULTS -->
+<!-- 8. RESULTS -->
 <section id="s-results">
-  <h2><span class="num">7</span> Results</h2>
+  <h2><span class="num">8</span> Results</h2>
 
-  <h3>7.1 &ensp;Vision transformer benchmark</h3>
+  <h3>8.1 &ensp;Vision transformer benchmark</h3>
   <p class="sub-lead">Identical downstream pipeline; only the frozen backbone changes.</p>
   <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code></td></tr></tbody></table>
 
-  <h3>7.2 &ensp;Component ablations</h3>
+  <h3>8.2 &ensp;Component ablations</h3>
   <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code></td></tr></tbody></table>
 
-  <h3>7.3 &ensp;Graph value as observations get sparse</h3>
+  <h3>8.3 &ensp;Graph value as observations get sparse</h3>
   <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code></td></tr></tbody></table>
 
-  <h3>7.4 &ensp;A negative result, reported</h3>
+  <h3>8.4 &ensp;A negative result, reported</h3>
   <div class="grid-2">
     <div class="callout compact">
       <b>The graph does not improve accuracy on this benchmark.</b>
@@ -327,9 +340,9 @@
   </div>
 </section>
 
-<!-- 8. CONCLUSION -->
+<!-- 9. CONCLUSION -->
 <section id="s-conclusion">
-  <h2><span class="num">8</span> Conclusion</h2>
+  <h2><span class="num">9</span> Conclusion</h2>
   <div class="grid-2">
     <div class="tile">
       <h3>What worked</h3>

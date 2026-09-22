@@ -47,7 +47,8 @@ async function boot() {
     return;
   }
   renderMethod();
-  await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops()]);
+  await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops(),
+                     loadParameters()]);
   await loadSamples();          // needs siteSelect to be populated first
   initTOC();
   bindDemoButtons(document);
@@ -364,6 +365,30 @@ function renderMethod() {
       <div class="mn">${i + 1}</div>
       <div><h4>${esc(t)}</h4><p>${esc(b)}</p>
         <div class="tags">${tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>
+      </div>
+    </div>`).join("");
+}
+
+/* -------------------------------------------------------------- parameters */
+async function loadParameters() {
+  let d;
+  try { d = await getJSON("/api/parameters"); } catch {
+    $("paramGroups").innerHTML =
+      `<p class="placeholder">Parameters unavailable &mdash; backend offline.</p>`;
+    return;
+  }
+  $("paramGroups").innerHTML = d.groups.map((g) => `
+    <div class="tile param-group" id="p-${esc(g.id)}">
+      <h3>${esc(g.title)}</h3>
+      <p class="micro">${esc(g.lead)}</p>
+      <div class="table-scroll">
+        <table class="ruled compact param-table">
+          <thead><tr><th>Parameter</th><th>Value</th><th>Why this value</th></tr></thead>
+          <tbody>${g.rows.map(([k, v, why]) => `
+            <tr><td>${esc(k)}</td><td class="pv">${fmt(v)}</td>
+                <td class="pw">${esc(why)}</td></tr>`).join("")}
+          </tbody>
+        </table>
       </div>
     </div>`).join("");
 }

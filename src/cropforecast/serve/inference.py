@@ -15,7 +15,7 @@ import io
 import json
 import pickle
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date as Date
 from pathlib import Path
 
@@ -30,6 +30,7 @@ from ..models.backbones import load_backbone
 from ..models.full_model import CropDiseaseForecastNet
 from ..physics.epidemiology import PROFILES, crop_pressure
 from ..physics.losses import PHYSICS_COLUMNS
+from . import bulletin
 
 RISK_LABELS = ("Low", "Medium", "High")
 
@@ -50,6 +51,10 @@ class Prediction:
     date: str
     advisory: str
     trace: list[dict]
+    organism: str = ""
+    disease_label: str = ""
+    farmer_actions: list[str] = field(default_factory=list)
+    officer_actions: list[str] = field(default_factory=list)
 
 
 class ForecastService:
@@ -300,6 +305,13 @@ class ForecastService:
             date=str(when),
             advisory=note,
             trace=trace,
+            disease_label=("Healthy leaf" if best.endswith("___healthy")
+                           else bulletin.pretty(best)),
+            organism=("Healthy" if best.endswith("___healthy")
+                      else bulletin.threat_profile(best)["organism"]),
+            farmer_actions=bulletin.farmer_actions(best),
+            officer_actions=bulletin.case_officer_actions(
+                best, max(bands, key=lambda b: RISK_LABELS.index(b))),
         )
 
     # -- agronomic advisory -------------------------------------------------

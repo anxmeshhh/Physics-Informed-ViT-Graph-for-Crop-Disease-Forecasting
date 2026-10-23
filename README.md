@@ -198,6 +198,34 @@ Later sections cover the consolidated research gap, the methodology block by
 block, the dataset and its honest provenance, single-image inference, the
 regional risk map, and the results tables.
 
+## For decision-makers: the district alert bulletin
+
+The first live section of the dashboard is written for an agriculture officer,
+not a researcher. Pick a crop and a date and every district growing it is
+ranked by what needs attention this week:
+
+- **Alert level** - *Act now*, *Watch* or *Normal*, from the worst day in the
+  coming week, so a district that is quiet today but turns high in five days is
+  flagged now
+- **The threat** - which disease the weather favours there, and what kind of
+  organism it is (fungal, water mould, bacterial, insect-borne, mite)
+- **Direction** - whether risk has been rising or falling over the past week,
+  with a sparkline of the past week and the coming one
+- **Spread watch** - neighbouring districts on the spatial graph that are
+  already on alert
+- **Recommended actions** - for officials (SMS advisory, KVK field
+  verification, input stock check) and for farmers, by organism type
+
+Everything is computed from the weather actually recorded at each district,
+through the same pathogen physics the network is trained against
+(`serve/bulletin.py`, `GET /api/bulletin`). The 7-day outlook is a hindcast: it
+replays the weather that followed, standing in for a weather forecast. Actions
+are general guidance and defer product and dose to the state agriculture
+department. A single diagnosed leaf gets the same treatment - the disease in
+plain words, its spread risk, and what the farmer and the officials should do.
+
+**Print bulletin** produces a paper copy of the bulletin alone.
+
 ## Going live: frontend on Netlify, model on your machine
 
 The model stays on the presenter's PC (it needs the GPU and the trained

@@ -3,9 +3,9 @@
    against the live system from its own row. */
 
 const $ = (id) => document.getElementById(id);
-const BAND_COLOUR = { Low: "#1c6ea4", Medium: "#b07d0a", High: "#9d2235" };
+const BAND_COLOUR = { Low: "#16a34a", Medium: "#d97706", High: "#dc2626" };
 
-let riskChart = null, leafletMap = null, mapLayers = null;
+let riskChart = null, leafletMap = null, mapLayers = null, mapSatellite = false;
 let selectedFile = null, demoCatalogue = {}, papers = [];
 let samples = [], sampleIdx = -1;
 const demoCharts = {};
@@ -82,6 +82,7 @@ async function boot() {
   renderMethod();
   await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops(),
                      loadParameters(), loadProgress()]);
+  updateMap();                  // the bulletin is the first thing an officer sees
   await loadSamples();          // needs siteSelect to be populated first
   initTOC();
   bindDemoButtons(document);
@@ -342,7 +343,7 @@ function drawResponseCurves(canvas, d) {
       datasets: Object.entries(d.curves).map(([name, vals], i) => ({
         label: name.split("___")[1].replace(/_/g, " ").slice(0, 22),
         data: vals, borderWidth: 2, pointRadius: 0, tension: .3,
-        borderColor: ["#14315c", "#7a1f2b", "#1f6b3a", "#b07d0a", "#1c6ea4"][i % 5],
+        borderColor: ["#15803d", "#ea580c", "#0f766e", "#d97706", "#2563eb"][i % 5],
       })),
     },
     options: {
@@ -521,10 +522,11 @@ async function loadCrops() {
   let d;
   try { d = await getJSON("/api/crops"); } catch { return; }
   const opts = d.crops.map((c) =>
-    `<option value="${esc(c.crop)}">${esc(pretty(c.crop))}</option>`).join("");
+    `<option value="${esc(c.crop)}">${esc(c.label || pretty(c.crop))}</option>`).join("");
   $("cropSelect").innerHTML = `<option value="">Infer from image</option>` + opts;
   $("mapCrop").innerHTML = opts;
-  $("mapCrop").value = "Tomato";
+  // Pre-monsoon maize: a realistic mix of districts to act on, watch and leave.
+  $("mapCrop").value = "Corn_(maize)";
 }
 
 /* ------------------------------------------------------------------ upload */
@@ -707,17 +709,28 @@ async function syncMapToRun(d) {
   } catch (err) {
     // initMap() runs outside updateMap's own guard, so a CDN-less Leaflet
     // would otherwise reject here unseen.
-    $("mapTable").innerHTML =
-      `<tbody><tr><td class="err">Map unavailable: ${esc(err.message)}</td></tr></tbody>`;
+    $("alertList").innerHTML = `<p class="err">Bulletin unavailable: ${esc(err.message)}</p>`;
   }
 }
 
 function showResult(d) {
   $("resultEmpty").hidden = true;
   $("resultBody").hidden = false;
-  $("diagName").textContent = pretty(d.disease);
+  const worst = d.risk_band.reduce((a, b) => (RISK_ORDER[b] > RISK_ORDER[a] ? b : a), "Low");
+  $("diagCard").className = `diag-card ${worst}`;
+  $("diagName").textContent = d.disease_label || pretty(d.disease);
   $("diagCrop").textContent = pretty(d.crop);
+  $("diagOrganism").textContent = d.organism || "";
   $("diagConf").textContent = `${(d.confidence * 100).toFixed(1)}%`;
+  $("sevPill").className = `sev-pill ${worst}`;
+  $("sevPill").textContent = `Spread risk: ${worst} · ${ALERT_WORD[worst]}`;
+  $("diagWhere").textContent =
+    `${d.site.name}, ${d.site.state} · ${fmtDate(d.date)} · ${d.site.agro_zone || ""}`;
+  const items = (xs) => xs.map((a) => `<li>${esc(a)}</li>`).join("");
+  $("farmerActions").innerHTML = d.farmer_actions && d.farmer_actions.length
+    ? items(d.farmer_actions)
+    : "<li>No disease found on this leaf &mdash; continue routine scouting</li>";
+  $("officerActions").innerHTML = items(d.officer_actions || []);
 
   $("horizonTable").innerHTML =
     `<thead><tr><th>Horizon</th><th>Risk</th><th>Band</th><th>± σ</th></tr></thead><tbody>` +
@@ -734,7 +747,7 @@ function showResult(d) {
       labels: d.horizons.map((h) => `+${h}d`),
       datasets: [{
         label: "risk", data: d.risk,
-        borderColor: "#14315c", backgroundColor: "rgba(20,49,92,.10)",
+        borderColor: "#15803d", backgroundColor: "rgba(21,128,61,.10)",
         fill: true, tension: .3, pointRadius: 5,
         pointBackgroundColor: d.risk_band.map((b) => BAND_COLOUR[b]),
       }],
@@ -840,9 +853,32 @@ function failPipeline() {
 function initMap() {
   if (leafletMap) return;
   leafletMap = L.map("leaflet").setView([22.5, 79], 5);
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-    attribution: "&copy; OpenStreetMap, &copy; CARTO", maxZoom: 18,
-  }).addTo(leafletMap);
+  // Esri tiles need no API key; CARTO's basemaps now watermark every tile
+  // "API KEY REQUIRED" without one. Base and labels are separate layers so the
+  // risk markers sit between the land and the place names.
+  const esri = "https://server.arcgisonline.com/ArcGIS/rest/services";
+  const tiles = (path, opts) => L.tileLayer(`${esri}/${path}/MapServer/tile/{z}/{y}/{x}`, opts);
+  const labels = (path) => tiles(path, { maxZoom: 18, pane: "shadowPane" });
+  const basemaps = {
+    "Map": L.layerGroup([
+      tiles("Canvas/World_Light_Gray_Base", { maxZoom: 16,
+        attribution: "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors" }),
+      labels("Canvas/World_Light_Gray_Reference"),
+    ]),
+    "Satellite": L.layerGroup([
+      tiles("World_Imagery", { maxZoom: 18,
+        attribution: "Imagery &copy; Esri &mdash; Maxar, Earthstar Geographics, GIS User Community" }),
+      labels("Reference/World_Boundaries_and_Places"),
+    ]),
+  };
+  basemaps["Map"].addTo(leafletMap);
+  L.control.layers(basemaps, null, { collapsed: false }).addTo(leafletMap);
+  leafletMap.on("baselayerchange", (e) => {
+    mapSatellite = e.name === "Satellite";
+    // The light map tops out at z16; imagery goes deeper.
+    leafletMap.setMaxZoom(mapSatellite ? 18 : 16);
+    mapLayers.eachLayer(restyle);
+  });
   mapLayers = L.layerGroup().addTo(leafletMap);
 
   // Leaflet sizes its tile grid once and does not re-measure on its own, so a
@@ -854,52 +890,189 @@ function initMap() {
   });
 }
 
+/* Hairlines vanish on dark imagery, so on satellite the edges turn white
+   and each marker gains a white ring; the alert colour stays in the fill. */
+function edgeStyle() {
+  return mapSatellite ? { color: "#ffffff", weight: 1.5, opacity: .7 }
+                      : { color: "#15803d", weight: 1, opacity: .35 };
+}
+function markerStyle(colour) {
+  return mapSatellite ? { color: "#ffffff", weight: 2, fillColor: colour, fillOpacity: .85 }
+                      : { color: colour, weight: 2, fillColor: colour, fillOpacity: .5 };
+}
+function restyle(layer) {
+  if (layer instanceof L.CircleMarker) layer.setStyle(markerStyle(layer.options.band));
+  else if (layer instanceof L.Polyline) layer.setStyle(edgeStyle());
+}
+
+/* ------------------------------------------------------- district bulletin */
+/* The regional view restated for an officer: which districts need action this
+   week, what the threat is, which way it is moving, and what to do. The map and
+   the cards are two views of one bulletin and stay linked in both directions. */
+let bulletin = null;
+const districtMarkers = {};
+const RISK_ORDER = { Low: 0, Medium: 1, High: 2 };
+const ALERT_WORD = { High: "Act now", Medium: "Watch", Low: "Normal" };
+const pct = (v) => `${Math.round(v * 100)}%`;
+const days = (n) => `${n} day${n === 1 ? "" : "s"}`;
+const fmtDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString(
+  "en-IN", { day: "numeric", month: "short", year: "numeric" });
+
 $("mapBtn").addEventListener("click", updateMap);
+$("showEdges").addEventListener("change", () => { if (bulletin) drawBulletinMap(bulletin, false); });
+$("printBtn").addEventListener("click", () => {
+  document.body.classList.add("print-bulletin");
+  window.print();
+});
+window.addEventListener("afterprint", () => document.body.classList.remove("print-bulletin"));
 
 async function updateMap() {
   initMap();
   setTimeout(() => leafletMap.invalidateSize(), 50);
   const btn = $("mapBtn");
-  btn.disabled = true; btn.textContent = "Loading…";
+  btn.disabled = true; btn.textContent = "Generating…";
   try {
-    const d = await getJSON(
-      `/api/graph?crop=${encodeURIComponent($("mapCrop").value)}&date=${$("mapDate").value}`);
-    mapLayers.clearLayers();
-
-    if ($("showEdges").checked) {
-      const pos = Object.fromEntries(d.nodes.map((n) => [n.site_id, [n.lat, n.lon]]));
-      d.edges.forEach((e) => {
-        if (!pos[e.source] || !pos[e.target]) return;
-        L.polyline([pos[e.source], pos[e.target]],
-          { color: "#14315c", weight: 1, opacity: .3 })
-          .bindTooltip(`${e.source} → ${e.target}: ${e.distance_km} km`).addTo(mapLayers);
-      });
-    }
-    d.nodes.forEach((n) => {
-      const colour = BAND_COLOUR[n.band] || "#7b838c";
-      const risk = n.risk ?? 0;
-      L.circleMarker([n.lat, n.lon], {
-        radius: 6 + risk * 10, color: colour, weight: 2,
-        fillColor: colour, fillOpacity: .5,
-      }).bindPopup(`<b>${esc(n.name)}</b><br>${esc(n.state)}<br>
-        Risk <b>${(risk * 100).toFixed(0)}%</b> (${esc(n.band || "n/a")})<br>
-        ${n.temperature_C ?? "—"} °C · ${n.humidity_pct ?? "—"}% RH<br>
-        Leaf wetness ${n.leaf_wetness_h ?? "—"} h`).addTo(mapLayers);
-    });
-
-    const ranked = d.nodes.filter((n) => n.risk != null).sort((a, b) => b.risk - a.risk);
-    $("mapTable").innerHTML =
-      `<thead><tr><th>Farm</th><th>State</th><th>Risk</th><th>Band</th>
-        <th>Temp (°C)</th><th>RH (%)</th><th>Leaf wetness (h)</th></tr></thead><tbody>` +
-      ranked.map((n) => `<tr><td>${esc(n.name)}</td><td>${esc(n.state)}</td>
-        <td class="n">${(n.risk * 100).toFixed(0)}%</td>
-        <td><span class="band ${n.band}">${n.band}</span></td>
-        <td class="n">${n.temperature_C}</td><td class="n">${n.humidity_pct}</td>
-        <td class="n">${n.leaf_wetness_h}</td></tr>`).join("") + "</tbody>";
+    bulletin = await getJSON(
+      `/api/bulletin?crop=${encodeURIComponent($("mapCrop").value)}&date=${$("mapDate").value}`);
+    renderBulletin(bulletin);
+    drawBulletinMap(bulletin, true);
   } catch (err) {
-    $("mapTable").innerHTML = `<tbody><tr><td class="err">${esc(err.message)}</td></tr></tbody>`;
+    $("bulletinHead").hidden = true;
+    $("alertList").innerHTML = `<p class="err">${esc(err.message)}</p>`;
   } finally {
-    btn.disabled = false; btn.textContent = "Update map";
+    btn.disabled = false; btn.textContent = "Generate bulletin";
+  }
+}
+
+function outlookText(r) {
+  if (r.peak_day === 0) return r.alert === "Low" ? "Low all week" : "Worst today";
+  if (RISK_ORDER[r.peak_band] > RISK_ORDER[r.band]) return `${r.peak_band} in ${days(r.peak_day)}`;
+  return `Peaks in ${days(r.peak_day)}`;
+}
+
+/* Past week solid, coming week dashed, today marked - so "rising" and "about to
+   rise" are visibly different things. */
+function sparkline(past, ahead, colour) {
+  const vals = [...past, ...ahead];
+  const W = 120, H = 34, P = 3;
+  const x = (i) => P + (i * (W - 2 * P)) / Math.max(vals.length - 1, 1);
+  const y = (v) => H - P - v * (H - 2 * P);
+  const pts = (arr, off) => arr.map((v, i) => `${x(i + off).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+  const ti = past.length - 1;
+  return `<svg class="spark" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img"
+      aria-label="Risk over the past 7 days and the next 7 days">
+    <title>Past 7 days (solid) and next 7 days (dashed)</title>
+    <line x1="${x(ti)}" x2="${x(ti)}" y1="${P}" y2="${H - P}" stroke="#cfd8d2" stroke-dasharray="2 2"/>
+    <polyline points="${pts(past, 0)}" fill="none" stroke="${colour}" stroke-width="2"/>
+    ${ahead.length ? `<polyline points="${pts([past[ti], ...ahead], ti)}" fill="none"
+      stroke="${colour}" stroke-width="2" stroke-dasharray="3 3"/>` : ""}
+    <circle cx="${x(ti)}" cy="${y(past[ti])}" r="3" fill="${colour}"/></svg>`;
+}
+
+function renderBulletin(b) {
+  const s = b.summary;
+  const calm = !s.counts.High;
+  const states = s.states_on_alert.length ? ` · States on alert: ${s.states_on_alert.join(", ")}` : "";
+  $("bHeadline").className = `headline${calm ? " calm" : ""}`;
+  $("bHeadline").innerHTML = `${esc(b.headline)}
+    <small>${esc(b.crop_label)} · as of ${fmtDate(b.date)} · outlook to ${fmtDate(b.outlook_until)}${esc(states)}</small>`;
+  $("bKpis").innerHTML = [
+    ["High", s.counts.High, "Act now"], ["Medium", s.counts.Medium, "Watch"],
+    ["Low", s.counts.Low, "Normal"], ["rise", s.rising, "Rising over the past week"],
+  ].map(([c, v, l]) => `<div class="kpi ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  $("bulletinHead").hidden = false;
+
+  $("alertList").innerHTML = b.districts.map((r) => {
+    const colour = BAND_COLOUR[r.alert];
+    const arrow = { Rising: "↑", Falling: "↓", Steady: "→" }[r.direction];
+    const threat = r.threat
+      ? `<b>${esc(r.threat.name)}</b> <span class="org">· ${esc(r.threat.organism)}</span>`
+      : `<span class="org">No significant threat this week</span>`;
+    const spread = r.neighbours_high.length
+      ? `<div class="acard-spread">⚠ ${r.neighbours_high.length} neighbouring district${r.neighbours_high.length > 1 ? "s" : ""} on alert: ${
+          r.neighbours_high.map((n) => `${esc(n.name)} (${Math.round(n.distance_km)} km)`).join(", ")}</div>`
+      : "";
+    const farmer = r.threat && r.alert !== "Low"
+      ? `<div><h5>For farmers</h5><ul>${r.threat.farmer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`
+      : "";
+    return `<article class="acard ${r.alert}" data-site="${esc(r.site_id)}">
+      <div class="acard-top">
+        <span class="acard-name">${esc(r.name)}</span>
+        <span class="acard-state">${esc(r.state)}</span>
+        <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span>
+      </div>
+      <div class="acard-row">
+        <div class="acard-stat">Risk today<b>${pct(r.risk)}</b></div>
+        <div class="acard-stat">Next 7 days<b>${esc(outlookText(r))}</b></div>
+        <div class="acard-stat">Past week<b class="dir-${r.direction}">${arrow} ${r.direction}</b></div>
+        ${sparkline(r.trend, r.outlook, colour)}
+      </div>
+      <div class="acard-threat">${threat}</div>
+      <div class="acard-drivers">${esc(r.drivers)}</div>
+      ${spread}
+      <div class="acard-more">Show recommended actions ▾</div>
+      <div class="acard-actions">
+        <div><h5>For officials</h5><ul>${r.officer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>
+        ${farmer}
+      </div>
+    </article>`;
+  }).join("");
+
+  $("alertList").querySelectorAll(".acard").forEach((card) => {
+    card.addEventListener("click", () => {
+      card.classList.toggle("open");
+      const m = districtMarkers[card.dataset.site];
+      if (m) { leafletMap.panTo(m.getLatLng()); m.openPopup(); }
+      markCard(card);
+    });
+  });
+}
+
+function markCard(card) {
+  $("alertList").querySelectorAll(".acard.focus").forEach((c) => c.classList.remove("focus"));
+  card.classList.add("focus");
+}
+
+function focusCard(siteId) {
+  const list = $("alertList");
+  const card = list.querySelector(`.acard[data-site="${CSS.escape(siteId)}"]`);
+  if (!card) return;
+  markCard(card);
+  card.classList.add("open");
+  // Scroll the list itself, never the page, so the map stays in view.
+  list.scrollTo({ top: card.offsetTop - list.offsetTop - 6, behavior: "smooth" });
+}
+
+function drawBulletinMap(b, fit) {
+  mapLayers.clearLayers();
+  Object.keys(districtMarkers).forEach((k) => delete districtMarkers[k]);
+  const byId = Object.fromEntries(b.districts.map((r) => [r.site_id, r]));
+
+  if ($("showEdges").checked) {
+    b.edges.forEach((e) => {
+      const a = byId[e.source], t = byId[e.target];
+      if (!a || !t) return;
+      L.polyline([[a.lat, a.lon], [t.lat, t.lon]], edgeStyle())
+        .bindTooltip(`${a.name} → ${t.name}: ${Math.round(e.distance_km)} km`).addTo(mapLayers);
+    });
+  }
+  // Drawn calm-first so the districts that need action sit on top.
+  [...b.districts].reverse().forEach((r) => {
+    const colour = BAND_COLOUR[r.alert];
+    const m = L.circleMarker([r.lat, r.lon], {
+      radius: 7 + Math.max(r.risk, r.peak_risk) * 11, band: colour, ...markerStyle(colour),
+    }).bindPopup(`<b>${esc(r.name)}</b>, ${esc(r.state)}<br>
+      <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span><br>
+      Risk today <b>${pct(r.risk)}</b> · next 7 days: ${esc(outlookText(r))}<br>
+      ${r.threat ? `Threat: <b>${esc(r.threat.name)}</b><br>` : ""}${esc(r.drivers)}`)
+      .addTo(mapLayers);
+    m.on("click", () => focusCard(r.site_id));
+    districtMarkers[r.site_id] = m;
+  });
+  if (fit && b.districts.length) {
+    // Measure first: fitting a map that has not sized itself yet centres it wrong.
+    leafletMap.invalidateSize();
+    leafletMap.fitBounds(L.latLngBounds(b.districts.map((r) => [r.lat, r.lon])).pad(0.25));
   }
 }
 

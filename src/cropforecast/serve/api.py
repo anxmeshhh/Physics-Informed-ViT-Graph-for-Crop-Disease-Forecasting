@@ -26,7 +26,7 @@ from PIL import Image
 
 from ..config import PROJECT_ROOT, load_config
 from ..data.farms import to_frame
-from . import demos, literature
+from . import bulletin, demos, literature
 from .inference import ForecastService
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -90,7 +90,8 @@ def sites():
 @app.get("/api/crops")
 def crops():
     svc = service()
-    return {"crops": [{"crop": c, "season": svc.season_for(c)} for c in svc.crops()]}
+    return {"crops": [{"crop": c, "label": bulletin.crop_label(c),
+                       "season": svc.season_for(c)} for c in svc.crops()]}
 
 
 # --- curated sample inputs -------------------------------------------------
@@ -613,33 +614,10 @@ async def predict_stream(
 @app.get("/api/graph")
 def graph_preview(crop: str, date: str, window: int = 7):
     """Edges of the spatial graph among farms growing a crop, for the map."""
-    from ..graph.build import site_distance_matrix
-    from ..data.farms import SITES
-
     svc = service()
-    sites = [s for s in SITES if crop in s.crops]
-    if len(sites) < 2:
+    sub, edges = bulletin.crop_edges(_cfg, crop)
+    if not edges:
         return {"nodes": [], "edges": []}
-
-    sub = to_frame(tuple(sites))
-    dist, bearing, ids = site_distance_matrix(sub)
-
-    radius = _cfg.graph.radius_km
-    k = _cfg.graph.k_neighbours
-    min_nb = _cfg.graph.min_neighbours
-
-    edges = []
-    for i, sid in enumerate(ids):
-        order = [j for j in dist[i].argsort() if j != i]
-        within = [j for j in order if dist[i, j] <= radius][:k]
-        if len(within) < min_nb:
-            within = order[:min_nb]
-        for j in within:
-            edges.append({
-                "source": sid, "target": ids[j],
-                "distance_km": round(float(dist[i, j]), 1),
-                "bearing_deg": round(float(bearing[i, j]), 1),
-            })
 
     risk = {r["site_id"]: r for r in svc.regional_forecast(Date.fromisoformat(date), crop)}
     nodes = [
@@ -647,6 +625,29 @@ def graph_preview(crop: str, date: str, window: int = 7):
         for r in sub[["site_id", "name", "lat", "lon", "state"]].to_dict("records")
     ]
     return {"crop": crop, "date": date, "nodes": nodes, "edges": edges}
+
+
+@app.get("/api/bulletin")
+def district_bulletin(crop: str, date: str):
+    """Every district growing a crop: alert level, threat, trend, 7-day outlook
+    and recommended actions. Served from the physics, so it needs no checkpoint."""
+    try:
+        when = Date.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    try:
+        out = bulletin.build(_cfg, demos.ClimateOnlyService(_cfg).climate, crop, when)
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Dataset not built yet - run scripts/01_build_dataset.py ({exc})",
+        ) from exc
+    if not out["districts"]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No weather on record for {crop} on {date}. Try a 2021-2023 date.",
+        )
+    return out
 
 
 # --- literature survey + live demonstrations -------------------------------

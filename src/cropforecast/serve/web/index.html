@@ -3,8 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Vision Transformer with Physics-Informed Graph Learning for Climate-Adaptive Crop Disease Forecasting</title>
+<title>Crop Disease Early Warning System</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Poppins:wght@600;700&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -13,12 +16,15 @@
 <!-- ===================== MASTHEAD ===================== -->
 <header class="masthead">
   <div class="wrap mast-inner">
-    <div>
-      <div class="dept">Seva Innovation Challenge &middot; Working Prototype</div>
-      <h1 class="doc-title">Vision Transformer with Physics-Informed Graph Learning
-        <span>for Climate-Adaptive Crop Disease Forecasting</span></h1>
-      <div class="authors">
-        <span><b>Animesh Gupta</b></span><span>Panel Number: 0696</span>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">&#127807;</div>
+      <div>
+        <div class="dept">Seva Innovation Challenge &middot; Working Prototype</div>
+        <h1 class="doc-title">Crop Disease Early Warning System
+          <span>Vision Transformer with Physics-Informed Graph Learning for Climate-Adaptive Crop Disease Forecasting</span></h1>
+        <div class="authors">
+          <span><b>Animesh Gupta</b></span><span>Panel Number: <b>0696</b></span>
+        </div>
       </div>
     </div>
     <div class="mast-status">
@@ -41,19 +47,21 @@
   <div class="toc-head">Contents</div>
   <ol id="tocList">
     <li><a href="#s-abstract" class="active">Overview</a></li>
+    <li><a href="#s-alerts">District Alerts</a></li>
+    <li><a href="#s-system">Live Diagnosis</a></li>
     <li><a href="#s-status">Project Status</a></li>
+    <li class="toc-group">How it works</li>
     <li><a href="#s-survey">Literature Survey</a></li>
     <li><a href="#s-gap">Research Gap</a></li>
     <li><a href="#s-method">Methodology</a></li>
     <li><a href="#s-data">Dataset</a></li>
     <li><a href="#s-params">Parameters</a></li>
-    <li><a href="#s-system">Live System</a></li>
     <li><a href="#s-results">Results</a></li>
     <li><a href="#s-conclusion">Conclusion</a></li>
   </ol>
   <div class="toc-note">
-    Every paper in the survey has a<br><b>Run demonstration</b> button that
-    executes against the live system.
+    Start with <b>District Alerts</b> for the regional picture, then
+    <b>Live Diagnosis</b> to test a single leaf.
   </div>
 </aside>
 
@@ -102,9 +110,127 @@
   </div>
 </section>
 
-<!-- 2. PROJECT STATUS -->
+<!-- 2. DISTRICT ALERTS -->
+<section id="s-alerts">
+  <h2><span class="num">2</span> District Alert Bulletin</h2>
+  <p class="sub-lead">Every district growing the selected crop, ranked by what needs attention this
+    week &mdash; the disease to expect, which way risk is moving, whether neighbouring districts are
+    already on alert, and what to do about it.</p>
+
+  <div class="controls alert-controls">
+    <label for="mapCrop">Crop</label><select id="mapCrop"></select>
+    <label for="mapDate">As of</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-05-30">
+    <button class="run cta" id="mapBtn">Generate bulletin</button>
+    <button class="run ghost" id="printBtn" type="button">Print bulletin</button>
+  </div>
+
+  <div id="bulletinHead" class="bulletin-head" hidden>
+    <div class="headline" id="bHeadline"></div>
+    <div class="kpis" id="bKpis"></div>
+  </div>
+
+  <div class="alert-grid">
+    <div class="map-col">
+      <div class="map-tools">
+        <label class="inline"><input type="checkbox" id="showEdges" checked> Show spread links</label>
+        <span class="legend"><span><i class="sw high"></i>Act now</span><span><i class="sw med"></i>Watch</span><span><i class="sw low"></i>Normal</span></span>
+      </div>
+      <div id="leaflet"></div>
+    </div>
+    <div class="alert-list" id="alertList"><p class="placeholder">Loading bulletin&hellip;</p></div>
+  </div>
+  <p class="micro" id="bNote">Risk is computed from the weather recorded at each district.
+    The 7-day outlook replays the weather that actually followed (a hindcast); in deployment the
+    same calculation runs on the weather forecast. Recommended actions are general guidance &mdash;
+    product and dose follow the state agriculture department.</p>
+</section>
+
+<!-- 3. LIVE DIAGNOSIS -->
+<section id="s-system">
+  <h2><span class="num">3</span> Live Field Diagnosis</h2>
+  <p class="sub-lead">A field officer or farmer photographs one leaf. The system names the disease,
+    forecasts how the risk at that farm moves over the next 7 days, and says what to do.</p>
+
+  <h3>3.1 &ensp;Diagnose a leaf</h3>
+  <div class="two-wide">
+    <div class="box">
+      <div class="box-title">Input</div>
+      <label>Leaf photograph</label>
+      <div class="dropzone" id="dropzone">
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <img id="preview" alt="">
+        <div id="dropHint">
+          <p>Click or drop a file</p>
+          <p class="hint"><code>data/raw/raw/color/</code></p>
+        </div>
+      </div>
+      <div class="sample-bar" id="sampleBar" hidden>
+        <button class="run ghost" id="sampleBtn">Load sample input</button>
+        <span class="hint" id="sampleNote">Fills every field from the held-out test set. Press Run to trace it.</span>
+      </div>
+      <label for="siteSelect">Farm</label>
+      <select id="siteSelect"></select>
+      <label for="dateInput">Date</label>
+      <input type="date" id="dateInput" min="2021-01-01" max="2023-12-24" value="2023-07-15">
+      <label for="cropSelect">Crop <span class="hint">optional</span></label>
+      <select id="cropSelect"><option value="">Infer from image</option></select>
+      <button class="run cta wide" id="predictBtn">Run full pipeline</button>
+      <p class="err" id="predictError"></p>
+    </div>
+
+    <div class="box">
+      <div class="box-title">Output</div>
+      <div id="resultEmpty" class="placeholder">Awaiting input.</div>
+      <div id="resultBody" hidden>
+        <div class="diag-card" id="diagCard">
+          <div class="diag-top">
+            <div>
+              <div class="diag-label">Diagnosis</div>
+              <div class="diag-name" id="diagName">&mdash;</div>
+              <div class="diag-meta"><span id="diagCrop"></span> &middot; <span id="diagOrganism"></span>
+                &middot; confidence <b id="diagConf"></b></div>
+            </div>
+            <div class="sev-pill" id="sevPill"></div>
+          </div>
+          <p class="advisory" id="advisory"></p>
+          <div class="diag-where" id="diagWhere"></div>
+        </div>
+
+        <div class="act-pair">
+          <div class="act-box farmer"><h4>What the farmer should do</h4><ul id="farmerActions"></ul></div>
+          <div class="act-box officer"><h4>What officials should do</h4><ul id="officerActions"></ul></div>
+        </div>
+
+        <div class="sub">Risk at this farm over the next 7 days</div>
+        <table class="ruled compact" id="horizonTable"></table>
+        <div class="chart-box"><canvas id="riskChart"></canvas></div>
+
+        <details class="tech">
+          <summary>Technical detail &mdash; weather inputs and alternative diagnoses</summary>
+          <div class="split">
+            <div><div class="sub flush">Driving weather</div>
+              <table class="ruled compact" id="climateTable"></table></div>
+            <div><div class="sub flush">Alternatives</div>
+              <table class="ruled compact" id="topk"></table></div>
+          </div>
+        </details>
+      </div>
+    </div>
+  </div>
+
+  <h3>3.2 &ensp;What the system did, step by step</h3>
+  <p class="sub-lead">Every stage of the run above, in order, with the wall-clock cost
+    it took and the shape it handed on. Measured during the request &mdash; not a
+    diagram of one.</p>
+  <div id="pipeline" class="pipeline">
+    <p class="placeholder">Run the pipeline to trace it.</p>
+  </div>
+
+</section>
+
+<!-- 4. PROJECT STATUS -->
 <section id="s-status">
-  <h2><span class="num">2</span> Project Status</h2>
+  <h2><span class="num">4</span> Project Status</h2>
   <p class="sub-lead">Completion is computed from artefacts that exist on disk &mdash;
     trained weights, result tables, generated figures, the deployment itself. A module
     counts as delivered only when every file that proves it ran is present, so this
@@ -129,9 +255,9 @@
   </div>
 </section>
 
-<!-- 3. LITERATURE SURVEY -->
+<!-- 5. LITERATURE SURVEY -->
 <section id="s-survey">
-  <h2><span class="num">3</span> Literature Survey</h2>
+  <h2><span class="num">5</span> Literature Survey</h2>
   <p class="sub-lead">
     18 works across transformer plant pathology, physics-informed modelling and
     graph learning. Each row states the gap it leaves &mdash; and runs the component
@@ -148,9 +274,9 @@
   </div>
 </section>
 
-<!-- 4. RESEARCH GAP -->
+<!-- 6. RESEARCH GAP -->
 <section id="s-gap">
-  <h2><span class="num">4</span> Research Gap</h2>
+  <h2><span class="num">6</span> Research Gap</h2>
   <p class="sub-lead">Six gaps consolidated from the survey, and the component that
     closes each one.</p>
   <div class="table-scroll">
@@ -162,20 +288,20 @@
         <tr><td>Spread between farms not captured</td><td>Spatio-temporal graph with directed downwind edges, 37 districts</td></tr>
         <tr><td>Physics knowledge not unified with prediction</td><td>Four agronomic constraints enter the objective as a soft physics loss</td></tr>
         <tr><td>Identification, not 1&ndash;7 day forecasting</td><td>Multi-horizon forecaster over 1, 3, 5 and 7 days</td></tr>
-        <tr><td>No geospatial view of affected areas</td><td>Regional risk map over the farm network (Section 8.3)</td></tr>
+        <tr><td>No geospatial view of affected areas</td><td>District alert bulletin and risk map (Section 2)</td></tr>
       </tbody>
     </table>
   </div>
 </section>
 
-<!-- 5. METHODOLOGY -->
+<!-- 7. METHODOLOGY -->
 <section id="s-method">
-  <h2><span class="num">5</span> Methodology</h2>
+  <h2><span class="num">7</span> Methodology</h2>
   <div id="methodFlow" class="method-flow"></div>
 
   <div class="grid-2 demo-pair">
     <div class="tile">
-      <h3>5.1 &ensp;Agronomic knowledge base</h3>
+      <h3>7.1 &ensp;Agronomic knowledge base</h3>
       <ul class="tight">
         <li>Analytis beta model for temperature response</li>
         <li>Moisture term differs <b>per organism</b></li>
@@ -187,7 +313,7 @@
       </div>
     </div>
     <div class="tile">
-      <h3>5.2 &ensp;Physics-informed loss</h3>
+      <h3>7.2 &ensp;Physics-informed loss</h3>
       <ul class="tight">
         <li>Risk must rise with leaf wetness and humidity</li>
         <li>Dry air must suppress fungal risk</li>
@@ -202,9 +328,9 @@
   </div>
 </section>
 
-<!-- 6. DATASET -->
+<!-- 8. DATASET -->
 <section id="s-data">
-  <h2><span class="num">6</span> Dataset</h2>
+  <h2><span class="num">8</span> Dataset</h2>
 
   <div class="grid-2">
     <div>
@@ -243,9 +369,9 @@
   </div>
 </section>
 
-<!-- 7. PARAMETERS -->
+<!-- 9. PARAMETERS -->
 <section id="s-params">
-  <h2><span class="num">7</span> Parameters</h2>
+  <h2><span class="num">9</span> Parameters</h2>
   <p class="sub-lead">Read live from <code>configs/default.yaml</code> and the fitted
     feature space, so it reports the run you are looking at. Open a group for the
     reasoning behind each value.</p>
@@ -254,99 +380,21 @@
   </div>
 </section>
 
-<!-- 8. LIVE SYSTEM -->
-<section id="s-system">
-  <h2><span class="num">8</span> Live System</h2>
-
-  <h3>8.1 &ensp;Single-observation inference</h3>
-  <div class="two-wide">
-    <div class="box">
-      <div class="box-title">Input</div>
-      <label>Leaf photograph</label>
-      <div class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" accept="image/*" hidden>
-        <img id="preview" alt="">
-        <div id="dropHint">
-          <p>Click or drop a file</p>
-          <p class="hint"><code>data/raw/raw/color/</code></p>
-        </div>
-      </div>
-      <div class="sample-bar" id="sampleBar" hidden>
-        <button class="run ghost" id="sampleBtn">Load sample input</button>
-        <span class="hint" id="sampleNote">Fills every field from the held-out test set. Press Run to trace it.</span>
-      </div>
-      <label for="siteSelect">Farm</label>
-      <select id="siteSelect"></select>
-      <label for="dateInput">Date</label>
-      <input type="date" id="dateInput" min="2021-01-01" max="2023-12-24" value="2023-07-15">
-      <label for="cropSelect">Crop <span class="hint">optional</span></label>
-      <select id="cropSelect"><option value="">Infer from image</option></select>
-      <button class="run wide" id="predictBtn">Run full pipeline</button>
-      <p class="err" id="predictError"></p>
-    </div>
-
-    <div class="box">
-      <div class="box-title">Output</div>
-      <div id="resultEmpty" class="placeholder">Awaiting input.</div>
-      <div id="resultBody" hidden>
-        <table class="kv">
-          <tr><th>Diagnosis</th><td id="diagName">&mdash;</td></tr>
-          <tr><th>Crop</th><td id="diagCrop">&mdash;</td></tr>
-          <tr><th>Confidence</th><td id="diagConf">&mdash;</td></tr>
-        </table>
-
-        <div class="sub">Forecast</div>
-        <table class="ruled compact" id="horizonTable"></table>
-        <div class="chart-box"><canvas id="riskChart"></canvas></div>
-
-        <div class="sub">Advisory</div>
-        <p class="advisory" id="advisory"></p>
-
-        <div class="split">
-          <div><div class="sub flush">Driving weather</div>
-            <table class="ruled compact" id="climateTable"></table></div>
-          <div><div class="sub flush">Alternatives</div>
-            <table class="ruled compact" id="topk"></table></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <h3>8.2 &ensp;Pipeline trace</h3>
-  <p class="sub-lead">Every stage of the run above, in order, with the wall-clock cost
-    it took and the shape it handed on. Measured during the request &mdash; not a
-    diagram of one.</p>
-  <div id="pipeline" class="pipeline">
-    <p class="placeholder">Run the pipeline to trace it.</p>
-  </div>
-
-  <h3>8.3 &ensp;Regional risk map</h3>
-  <div class="controls">
-    <label for="mapCrop">Crop</label><select id="mapCrop"></select>
-    <label for="mapDate">Date</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-07-15">
-    <label class="inline"><input type="checkbox" id="showEdges" checked> graph edges</label>
-    <button class="run" id="mapBtn">Update map</button>
-    <span class="legend"><span><i class="sw low"></i>Low</span><span><i class="sw med"></i>Medium</span><span><i class="sw high"></i>High</span></span>
-  </div>
-  <div id="leaflet"></div>
-  <table class="ruled compact" id="mapTable"></table>
-</section>
-
-<!-- 9. RESULTS -->
+<!-- 10. RESULTS -->
 <section id="s-results">
-  <h2><span class="num">9</span> Results</h2>
+  <h2><span class="num">10</span> Results</h2>
 
-  <h3>9.1 &ensp;Vision transformer benchmark</h3>
+  <h3>10.1 &ensp;Vision transformer benchmark</h3>
   <p class="sub-lead">Identical downstream pipeline; only the frozen backbone changes.</p>
   <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code></td></tr></tbody></table>
 
-  <h3>9.2 &ensp;Component ablations</h3>
+  <h3>10.2 &ensp;Component ablations</h3>
   <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code></td></tr></tbody></table>
 
-  <h3>9.3 &ensp;Graph value as observations get sparse</h3>
+  <h3>10.3 &ensp;Graph value as observations get sparse</h3>
   <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code></td></tr></tbody></table>
 
-  <h3>9.4 &ensp;A negative result, reported</h3>
+  <h3>10.4 &ensp;A negative result, reported</h3>
   <div class="grid-2">
     <div class="callout compact">
       <b>The graph does not improve accuracy on this benchmark.</b>
@@ -367,9 +415,9 @@
   </div>
 </section>
 
-<!-- 10. CONCLUSION -->
+<!-- 11. CONCLUSION -->
 <section id="s-conclusion">
-  <h2><span class="num">10</span> Conclusion</h2>
+  <h2><span class="num">11</span> Conclusion</h2>
   <div class="grid-2">
     <div class="tile">
       <h3>What worked</h3>

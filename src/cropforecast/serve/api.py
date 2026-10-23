@@ -26,7 +26,7 @@ from PIL import Image
 
 from ..config import PROJECT_ROOT, load_config
 from ..data.farms import to_frame
-from . import bulletin, demos, literature
+from . import bulletin, demos, literature, nearby
 from .inference import ForecastService
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -648,6 +648,41 @@ def district_bulletin(crop: str, date: str):
             detail=f"No weather on record for {crop} on {date}. Try a 2021-2023 date.",
         )
     return out
+
+
+@app.get("/api/nearby")
+def near_location(lat: float, lon: float, crop: str, date: str, radius_km: float = 300.0):
+    """Risk at one precise location: the weather here, plus disease arriving from
+    nearby districts on the wind. Same alert scale and actions as the bulletin."""
+    if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        raise HTTPException(status_code=400, detail="lat/lon out of range")
+    try:
+        when = Date.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    light = demos.ClimateOnlyService(_cfg)
+    try:
+        return nearby.assess_location(_cfg, light.climate, light.outbreaks, crop, when,
+                                      lat, lon, radius_km=min(max(radius_km, 25.0), 1500.0))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Dataset not built yet - run scripts/01_build_dataset.py ({exc})",
+        ) from exc
+
+
+@app.get("/api/geocode")
+def place_search(q: str):
+    """Find a village, town or district by name."""
+    if len(q.strip()) < 2:
+        return {"results": []}
+    try:
+        return {"results": nearby.geocode(q.strip())}
+    except Exception as exc:                                   # noqa: BLE001
+        raise HTTPException(status_code=502,
+                            detail=f"Place search unavailable: {exc}") from exc
 
 
 # --- literature survey + live demonstrations -------------------------------

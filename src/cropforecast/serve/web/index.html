@@ -118,10 +118,28 @@
     already on alert, and what to do about it.</p>
 
   <div class="controls alert-controls">
+    <div class="seg" role="group" aria-label="View">
+      <button type="button" class="seg-btn on" id="modeCountry" aria-pressed="true">Whole country</button>
+      <button type="button" class="seg-btn" id="modeNear" aria-pressed="false">Near a location</button>
+    </div>
     <label for="mapCrop">Crop</label><select id="mapCrop"></select>
     <label for="mapDate">As of</label><input type="date" id="mapDate" min="2021-01-01" max="2023-12-24" value="2023-05-30">
     <button class="run cta" id="mapBtn">Generate bulletin</button>
     <button class="run ghost" id="printBtn" type="button">Print bulletin</button>
+  </div>
+
+  <div class="near-bar" id="nearBar" hidden>
+    <button class="run ghost" id="gpsBtn" type="button">&#128205; Use my location</button>
+    <form id="placeForm" class="place-form">
+      <input type="search" id="placeInput" placeholder="Search a village, town or district" aria-label="Search a place">
+      <button class="run ghost" type="submit">Search</button>
+    </form>
+    <span class="hint">or click anywhere on the map</span>
+    <label for="radiusSel">Radius</label>
+    <select id="radiusSel"><option value="150">150 km</option><option value="300" selected>300 km</option><option value="500">500 km</option></select>
+    <button class="run ghost" id="nearExample" type="button">Try an example</button>
+    <div class="place-results" id="placeResults"></div>
+    <p class="err" id="nearError"></p>
   </div>
 
   <div id="bulletinHead" class="bulletin-head" hidden>
@@ -140,6 +158,8 @@
     <div class="alert-list" id="alertList"><p class="placeholder">Loading bulletin&hellip;</p></div>
   </div>
   <p class="micro" id="bNote">Risk is computed from the weather recorded at each district.
+    For a chosen location it combines the weather recorded at that exact spot with disease
+    arriving from nearby districts on the wind, as simulated by the project's epidemic model.
     The 7-day outlook replays the weather that actually followed (a hindcast); in deployment the
     same calculation runs on the weather forecast. Recommended actions are general guidance &mdash;
     product and dose follow the state agriculture department.</p>

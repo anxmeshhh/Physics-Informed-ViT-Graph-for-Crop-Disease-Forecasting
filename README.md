@@ -226,6 +226,34 @@ plain words, its spread risk, and what the farmer and the officials should do.
 
 **Print bulletin** produces a paper copy of the bulletin alone.
 
+### Near a precise location
+
+Switch the bulletin from **Whole country** to **Near a location** and choose a
+point by GPS, by searching a village or town, or by clicking the map. The page
+then answers the two questions behind the project's forecasting target
+(`physics.contagion.combined_risk`) for that exact spot:
+
+- **Is the weather here favourable?** The weather recorded at those
+  coordinates, fetched from the same Open-Meteo archive as every district
+  (no key), through the same agro-meteorology and pathogen physics
+- **Is disease arriving?** The simulated epidemic's infection pressure at every
+  district growing the crop, carried here by the contagion model's dispersal
+  kernel - decaying with distance (180 km), boosted when the wind at the source
+  was blowing this way
+
+The location gets the same alert, trend, threat and actions as a district,
+plus a ranked list of where disease could come from - distance, direction,
+outbreak state, whether the wind is carrying it this way, and its share of what
+is arriving (`serve/nearby.py`, `GET /api/nearby`, `GET /api/geocode`). If the
+weather lookup is unavailable, the nearest district's weather is used and the
+page says so.
+
+**Try an example** loads a real case from the record: on 22 June 2023 Bhopal is
+not a monitored district and its own weather is only moderately favourable
+(22% today), but an outbreak is starting in Ujjain and Indore 170 km to the
+west with the wind blowing east - so it is already flagged *Act now*. Three
+days later its risk is 94%.
+
 ## Going live: frontend on Netlify, model on your machine
 
 The model stays on the presenter's PC (it needs the GPU and the trained

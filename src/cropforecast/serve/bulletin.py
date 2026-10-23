@@ -222,6 +222,49 @@ def _drivers(row: pd.Series, disease: str | None, alert: str) -> str:
     return f"Wet leaves: {wet:.0f} h leaf wetness, {rh:.0f}% humidity, {t:.0f} °C"
 
 
+def assess(pressure: np.ndarray, weather: pd.DataFrame, today: pd.Timestamp,
+           peers: list[str]) -> dict:
+    """Alert, threat, trend and actions from one place's daily risk series.
+
+    ``pressure`` is aligned with the rows of ``weather``, which span the past
+    week through the coming one. A district and a precise location are judged
+    by exactly this, so the two views can never disagree on what an alert means.
+    """
+    dates = list(weather.date)
+    i_today = dates.index(today)
+    past = pressure[: i_today + 1]
+    ahead = pressure[i_today + 1:]
+    risk = float(pressure[i_today])
+
+    # The worst day in view, today included: that is what the officer has
+    # to prepare for, and naming a lower "peak" than today would read wrong.
+    k = int(np.argmax(pressure[i_today:]))
+    at = i_today + k
+    peak, peak_day = float(pressure[at]), (dates[at] - today).days
+    alert = band(peak)
+
+    # A place at normal risk has no threat worth naming.
+    threat = None
+    if peers and alert != "Low":
+        scores = {c: float(favourability(c, weather.iloc[[at]])[0]) for c in peers}
+        threat = max(scores, key=scores.get)
+
+    change = risk - float(past[0])
+    return {
+        "risk": round(risk, 4), "band": band(risk),
+        "peak_risk": round(peak, 4), "peak_band": band(peak), "peak_day": peak_day,
+        "alert": alert, "alert_text": ALERT_TEXT[alert],
+        "trend": [round(float(v), 4) for v in past],
+        "outlook": [round(float(v), 4) for v in ahead],
+        "change_7d": round(change, 4),
+        "direction": ("Rising" if change > 0.08 else
+                      "Falling" if change < -0.08 else "Steady"),
+        "threat": threat_profile(threat) if threat else None,
+        "drivers": _drivers(weather.iloc[at], threat, alert),
+        "officer_actions": OFFICER_ACTIONS[alert],
+    }
+
+
 def build(cfg, climate: pd.DataFrame, crop: str, when: Date) -> dict:
     """The bulletin for every district growing ``crop``, as of ``when``."""
     start = pd.Timestamp(when - timedelta(days=TREND_DAYS - 1))
@@ -239,42 +282,10 @@ def build(cfg, climate: pd.DataFrame, crop: str, when: Date) -> dict:
         w = window[window.site_id == s.site_id].reset_index(drop=True)
         if not (w.date == today).any():
             continue
-        pressure = crop_pressure(crop, w)
-        dates = list(w.date)
-        i_today = dates.index(today)
-
-        past = pressure[: i_today + 1]
-        ahead = pressure[i_today + 1:]
-        risk = float(pressure[i_today])
-
-        # The worst day in view, today included: that is what the officer has
-        # to prepare for, and naming a lower "peak" than today would read wrong.
-        k = int(np.argmax(pressure[i_today:]))
-        at = i_today + k
-        peak, peak_day = float(pressure[at]), (dates[at] - today).days
-        alert = band(peak)
-
-        # A normal district has no threat worth naming.
-        threat = None
-        if peers and alert != "Low":
-            scores = {c: float(favourability(c, w.iloc[[at]])[0]) for c in peers}
-            threat = max(scores, key=scores.get)
-
-        change = risk - float(past[0])
         rows.append({
             "site_id": s.site_id, "name": s.name, "state": s.state,
             "lat": s.lat, "lon": s.lon,
-            "risk": round(risk, 4), "band": band(risk),
-            "peak_risk": round(peak, 4), "peak_band": band(peak), "peak_day": peak_day,
-            "alert": alert, "alert_text": ALERT_TEXT[alert],
-            "trend": [round(float(v), 4) for v in past],
-            "outlook": [round(float(v), 4) for v in ahead],
-            "change_7d": round(change, 4),
-            "direction": ("Rising" if change > 0.08 else
-                          "Falling" if change < -0.08 else "Steady"),
-            "threat": threat_profile(threat) if threat else None,
-            "drivers": _drivers(w.iloc[at], threat, alert),
-            "officer_actions": OFFICER_ACTIONS[alert],
+            **assess(crop_pressure(crop, w), w, today, peers),
         })
 
     # Spread watch: the graph the model passes messages over, read as "which

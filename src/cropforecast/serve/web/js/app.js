@@ -880,6 +880,9 @@ function initMap() {
     mapLayers.eachLayer(restyle);
   });
   mapLayers = L.layerGroup().addTo(leafletMap);
+  leafletMap.on("click", (e) => {
+    if (viewMode === "near") choosePoint(e.latlng.lat, e.latlng.lng, "Pinned location");
+  });
 
   // Leaflet sizes its tile grid once and does not re-measure on its own, so a
   // window resize leaves tiles hanging past the new viewport width.
@@ -900,9 +903,11 @@ function markerStyle(colour) {
   return mapSatellite ? { color: "#ffffff", weight: 2, fillColor: colour, fillOpacity: .85 }
                       : { color: colour, weight: 2, fillColor: colour, fillOpacity: .5 };
 }
+// Only district markers and graph edges follow the basemap; the location pin,
+// its radius ring and the spread lines keep their own colours.
 function restyle(layer) {
-  if (layer instanceof L.CircleMarker) layer.setStyle(markerStyle(layer.options.band));
-  else if (layer instanceof L.Polyline) layer.setStyle(edgeStyle());
+  if (layer.options.band) layer.setStyle(markerStyle(layer.options.band));
+  else if (layer.options.edge) layer.setStyle(edgeStyle());
 }
 
 /* ------------------------------------------------------- district bulletin */
@@ -919,7 +924,9 @@ const fmtDate = (iso) => new Date(`${iso}T00:00:00`).toLocaleDateString(
   "en-IN", { day: "numeric", month: "short", year: "numeric" });
 
 $("mapBtn").addEventListener("click", updateMap);
-$("showEdges").addEventListener("change", () => { if (bulletin) drawBulletinMap(bulletin, false); });
+$("showEdges").addEventListener("change", () => {
+  if (bulletin && viewMode === "country") drawBulletinMap(bulletin, false);
+});
 $("printBtn").addEventListener("click", () => {
   document.body.classList.add("print-bulletin");
   window.print();
@@ -927,6 +934,11 @@ $("printBtn").addEventListener("click", () => {
 window.addEventListener("afterprint", () => document.body.classList.remove("print-bulletin"));
 
 async function updateMap() {
+  if (viewMode === "near") {
+    if (point) return assessPoint();
+    $("nearError").textContent = "Choose a location first: GPS, a place search, or a click on the map.";
+    return;
+  }
   initMap();
   setTimeout(() => leafletMap.invalidateSize(), 50);
   const btn = $("mapBtn");
@@ -982,43 +994,49 @@ function renderBulletin(b) {
   ].map(([c, v, l]) => `<div class="kpi ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
   $("bulletinHead").hidden = false;
 
-  $("alertList").innerHTML = b.districts.map((r) => {
-    const colour = BAND_COLOUR[r.alert];
-    const arrow = { Rising: "↑", Falling: "↓", Steady: "→" }[r.direction];
-    const threat = r.threat
-      ? `<b>${esc(r.threat.name)}</b> <span class="org">· ${esc(r.threat.organism)}</span>`
-      : `<span class="org">No significant threat this week</span>`;
-    const spread = r.neighbours_high.length
-      ? `<div class="acard-spread">⚠ ${r.neighbours_high.length} neighbouring district${r.neighbours_high.length > 1 ? "s" : ""} on alert: ${
-          r.neighbours_high.map((n) => `${esc(n.name)} (${Math.round(n.distance_km)} km)`).join(", ")}</div>`
-      : "";
-    const farmer = r.threat && r.alert !== "Low"
-      ? `<div><h5>For farmers</h5><ul>${r.threat.farmer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`
-      : "";
-    return `<article class="acard ${r.alert}" data-site="${esc(r.site_id)}">
-      <div class="acard-top">
-        <span class="acard-name">${esc(r.name)}</span>
-        <span class="acard-state">${esc(r.state)}</span>
-        <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span>
-      </div>
-      <div class="acard-row">
-        <div class="acard-stat">Risk today<b>${pct(r.risk)}</b></div>
-        <div class="acard-stat">Next 7 days<b>${esc(outlookText(r))}</b></div>
-        <div class="acard-stat">Past week<b class="dir-${r.direction}">${arrow} ${r.direction}</b></div>
-        ${sparkline(r.trend, r.outlook, colour)}
-      </div>
-      <div class="acard-threat">${threat}</div>
-      <div class="acard-drivers">${esc(r.drivers)}</div>
-      ${spread}
-      <div class="acard-more">Show recommended actions ▾</div>
-      <div class="acard-actions">
-        <div><h5>For officials</h5><ul>${r.officer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>
-        ${farmer}
-      </div>
-    </article>`;
-  }).join("");
+  $("alertList").innerHTML = b.districts.map((r) => alertCard(r)).join("");
+  bindAlertCards();
+}
 
-  $("alertList").querySelectorAll(".acard").forEach((card) => {
+/* One place's alert card - a monitored district, or the location being looked at. */
+function alertCard(r, extraClass = "") {
+  const colour = BAND_COLOUR[r.alert];
+  const arrow = { Rising: "↑", Falling: "↓", Steady: "→" }[r.direction];
+  const threat = r.threat
+    ? `<b>${esc(r.threat.name)}</b> <span class="org">· ${esc(r.threat.organism)}</span>`
+    : `<span class="org">No significant threat this week</span>`;
+  const spread = r.neighbours_high && r.neighbours_high.length
+    ? `<div class="acard-spread">⚠ ${r.neighbours_high.length} neighbouring district${r.neighbours_high.length > 1 ? "s" : ""} on alert: ${
+        r.neighbours_high.map((n) => `${esc(n.name)} (${Math.round(n.distance_km)} km)`).join(", ")}</div>`
+    : "";
+  const farmer = r.threat && r.alert !== "Low"
+    ? `<div><h5>For farmers</h5><ul>${r.threat.farmer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>`
+    : "";
+  return `<article class="acard ${r.alert} ${extraClass}" data-site="${esc(r.site_id)}">
+    <div class="acard-top">
+      <span class="acard-name">${esc(r.name)}</span>
+      <span class="acard-state">${esc(r.state)}</span>
+      <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span>
+    </div>
+    <div class="acard-row">
+      <div class="acard-stat">Risk today<b>${pct(r.risk)}</b></div>
+      <div class="acard-stat">Next 7 days<b>${esc(outlookText(r))}</b></div>
+      <div class="acard-stat">Past week<b class="dir-${r.direction}">${arrow} ${r.direction}</b></div>
+      ${sparkline(r.trend, r.outlook, colour)}
+    </div>
+    <div class="acard-threat">${threat}</div>
+    <div class="acard-drivers">${esc(r.drivers)}</div>
+    ${spread}
+    <div class="acard-more">Show recommended actions ▾</div>
+    <div class="acard-actions">
+      <div><h5>For officials</h5><ul>${r.officer_actions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></div>
+      ${farmer}
+    </div>
+  </article>`;
+}
+
+function bindAlertCards() {
+  $("alertList").querySelectorAll(".acard, .src-card").forEach((card) => {
     card.addEventListener("click", () => {
       card.classList.toggle("open");
       const m = districtMarkers[card.dataset.site];
@@ -1052,7 +1070,7 @@ function drawBulletinMap(b, fit) {
     b.edges.forEach((e) => {
       const a = byId[e.source], t = byId[e.target];
       if (!a || !t) return;
-      L.polyline([[a.lat, a.lon], [t.lat, t.lon]], edgeStyle())
+      L.polyline([[a.lat, a.lon], [t.lat, t.lon]], { ...edgeStyle(), edge: true })
         .bindTooltip(`${a.name} → ${t.name}: ${Math.round(e.distance_km)} km`).addTo(mapLayers);
     });
   }
@@ -1074,6 +1092,213 @@ function drawBulletinMap(b, fit) {
     leafletMap.invalidateSize();
     leafletMap.fitBounds(L.latLngBounds(b.districts.map((r) => [r.lat, r.lon])).pad(0.25));
   }
+}
+
+/* ----------------------------------------------------- near a location */
+/* The same alert, threat and actions as a district, for any point: the weather
+   recorded at that exact spot, plus disease arriving from the districts around
+   it on the wind. Chosen by GPS, by place search, or by clicking the map. */
+let viewMode = "country";
+let point = null;               // { lat, lon, label }
+const SOURCE_STATE = (x) => (x > 0.5 ? "Active outbreak" : x > 0.1 ? "Outbreak building" : "Quiet");
+
+function setMode(mode) {
+  viewMode = mode;
+  $("modeCountry").classList.toggle("on", mode === "country");
+  $("modeNear").classList.toggle("on", mode === "near");
+  $("modeCountry").setAttribute("aria-pressed", String(mode === "country"));
+  $("modeNear").setAttribute("aria-pressed", String(mode === "near"));
+  $("nearBar").hidden = mode !== "near";
+  $("mapBtn").textContent = mode === "near" ? "Assess location" : "Generate bulletin";
+  $("printBtn").textContent = mode === "near" ? "Print report" : "Print bulletin";
+  if (mode === "near" && !point) {
+    initMap();
+    mapLayers.clearLayers();
+    $("bulletinHead").hidden = true;
+    $("alertList").innerHTML = `<p class="placeholder">Choose a location: use your GPS,
+      search for a place, or click anywhere on the map.</p>`;
+    return;
+  }
+  updateMap();
+}
+$("modeCountry").addEventListener("click", () => setMode("country"));
+$("modeNear").addEventListener("click", () => setMode("near"));
+$("radiusSel").addEventListener("change", () => { if (point) assessPoint(); });
+
+function choosePoint(lat, lon, label) {
+  point = { lat, lon, label };
+  $("placeResults").innerHTML = "";
+  $("nearError").textContent = "";
+  if (viewMode !== "near") setMode("near"); else assessPoint();
+}
+
+$("gpsBtn").addEventListener("click", () => {
+  $("nearError").textContent = "";
+  if (!navigator.geolocation) {
+    $("nearError").textContent = "This browser cannot share its location - search for a place instead.";
+    return;
+  }
+  const btn = $("gpsBtn");
+  btn.disabled = true; btn.textContent = "Locating…";
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      btn.disabled = false; btn.innerHTML = "&#128205; Use my location";
+      choosePoint(pos.coords.latitude, pos.coords.longitude, "Your location");
+    },
+    (err) => {
+      btn.disabled = false; btn.innerHTML = "&#128205; Use my location";
+      $("nearError").textContent = err.code === 1
+        ? "Location permission was refused - search for a place or click the map instead."
+        : "Could not get a GPS fix - search for a place or click the map instead.";
+    },
+    { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+  );
+});
+
+$("placeForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const q = $("placeInput").value.trim();
+  if (q.length < 2) return;
+  $("nearError").textContent = "";
+  $("placeResults").innerHTML = `<span class="hint">Searching…</span>`;
+  try {
+    const d = await getJSON(`/api/geocode?q=${encodeURIComponent(q)}`);
+    if (!d.results.length) {
+      $("placeResults").innerHTML = `<span class="hint">No place called “${esc(q)}” found.</span>`;
+      return;
+    }
+    $("placeResults").innerHTML = d.results.map((h, i) =>
+      `<button type="button" class="place-hit" data-i="${i}">${esc(h.name)} <span>${esc(h.region)}</span></button>`).join("");
+    $("placeResults").querySelectorAll(".place-hit").forEach((b) => b.addEventListener("click", () => {
+      const h = d.results[Number(b.dataset.i)];
+      choosePoint(h.lat, h.lon, `${h.name}, ${h.region.split(",").slice(-2, -1)[0]?.trim() || h.region}`);
+    }));
+  } catch (err) {
+    $("placeResults").innerHTML = "";
+    $("nearError").textContent = err.message;
+  }
+});
+
+/* A real case from the record: on 22 June 2023 Bhopal is not a monitored
+   district and its own weather is only moderately favourable, but an outbreak
+   is starting in Ujjain and Indore to the west and the wind is blowing east. */
+$("nearExample").addEventListener("click", () => {
+  $("mapCrop").value = "Corn_(maize)";
+  $("mapDate").value = "2023-06-22";
+  choosePoint(23.2599, 77.4126, "Bhopal, Madhya Pradesh");
+});
+
+async function assessPoint() {
+  initMap();
+  setTimeout(() => leafletMap.invalidateSize(), 50);
+  const btn = $("mapBtn");
+  btn.disabled = true; btn.textContent = "Assessing…";
+  $("nearError").textContent = "";
+  try {
+    const q = new URLSearchParams({
+      lat: point.lat.toFixed(5), lon: point.lon.toFixed(5), crop: $("mapCrop").value,
+      date: $("mapDate").value, radius_km: $("radiusSel").value,
+    });
+    const r = await getJSON(`/api/nearby?${q}`);
+    renderNear(r);
+    drawNearMap(r);
+  } catch (err) {
+    $("bulletinHead").hidden = true;
+    $("alertList").innerHTML = `<p class="err">${esc(err.message)}</p>`;
+  } finally {
+    btn.disabled = false; btn.textContent = "Assess location";
+  }
+}
+
+function placeName(r) {
+  if (point.label !== "Pinned location") return point.label;
+  return r.nearest.distance_km < 40 ? `Near ${r.nearest.name}` : "Pinned location";
+}
+
+function renderNear(r) {
+  const name = placeName(r);
+  const calm = r.alert === "Low";
+  const top = r.sources.find((s) => s.share > 0.05);
+  const lead = top
+    ? `Disease arriving from nearby farms: ${pct(r.incoming)}, mostly from ${top.name} ` +
+      `(${Math.round(top.distance_km)} km ${top.direction}${top.wind_toward_you ? ", wind blowing toward you" : ""}).`
+    : "No outbreak nearby is sending disease this way.";
+  const notes = [r.note, r.in_study_area ? null
+    : "This point is outside the Indian study area; treat the result as indicative only."].filter(Boolean);
+  $("bHeadline").className = `headline${calm ? " calm" : ""}`;
+  $("bHeadline").innerHTML = `${esc(name)}: ${ALERT_WORD[r.alert]} - risk ${pct(r.risk)} today, ${
+    esc(outlookText(r).replace(/^(Low|Worst|Peaks)/, (w) => w.toLowerCase()))}. ${esc(lead)}
+    <small>${esc(r.crop_label)} · as of ${fmtDate(r.date)} · ${r.lat.toFixed(3)}, ${r.lon.toFixed(3)} ·
+      nearest monitored district: ${esc(r.nearest.name)}, ${Math.round(r.nearest.distance_km)} km ${r.nearest.direction}
+      ${notes.map((n) => `<br>${esc(n)}`).join("")}</small>`;
+  const bandOf = (v) => (v > 0.55 ? "High" : v > 0.25 ? "Medium" : "Low");
+  $("bKpis").innerHTML = [
+    [r.alert, pct(r.risk), "Overall risk here today"],
+    [bandOf(r.local), pct(r.local), "Weather here favours disease"],
+    [bandOf(r.incoming), pct(r.incoming), "Disease arriving from nearby farms"],
+    [r.peak_band, pct(r.peak_risk), r.peak_day ? `Worst in the next 7 days (day ${r.peak_day})` : "Worst in the next 7 days (today)"],
+  ].map(([c, v, l]) => `<div class="kpi ${c}"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  $("bulletinHead").hidden = false;
+
+  const here = alertCard({
+    ...r, site_id: "here", name: `📍 ${name}`,
+    state: r.weather_source,
+  }, "here open");
+  const sources = r.sources.map((s) => `
+    <div class="src-card" data-site="${esc(s.site_id)}">
+      <div class="src-top">
+        <span class="acard-name">${esc(s.name)}</span>
+        <span class="acard-state">${esc(s.state)} · ${Math.round(s.distance_km)} km ${s.direction} of here</span>
+        <span class="pill ${s.alert}">${ALERT_WORD[s.alert]}</span>
+      </div>
+      <div class="src-meta">${SOURCE_STATE(s.infection)} ·
+        <span class="src-wind ${s.wind_toward_you ? "toward" : ""}">${s.wind_toward_you
+          ? `wind blowing toward you (${Math.round(s.wind_kmh)} km/h)` : "wind not toward you"}</span></div>
+      <div class="src-meta">${pct(s.share)} of the disease arriving here today</div>
+      <div class="share-bar"><i style="width:${Math.max(s.share * 100, s.share > 0 ? 2 : 0)}%"></i></div>
+    </div>`).join("");
+  $("alertList").innerHTML = here +
+    `<div class="list-head">Where disease could come from · within ${esc($("radiusSel").value)} km</div>` +
+    (sources || `<p class="placeholder">No monitored ${esc(r.crop_label.toLowerCase())} district within
+      ${esc($("radiusSel").value)} km. The nearest is ${esc(r.nearest.name)}, ${Math.round(r.nearest.distance_km)} km away.</p>`);
+  bindAlertCards();
+}
+
+function drawNearMap(r) {
+  mapLayers.clearLayers();
+  Object.keys(districtMarkers).forEach((k) => delete districtMarkers[k]);
+  const here = [r.lat, r.lon];
+  const ring = L.circle(here, {
+    radius: r.radius_km * 1000, color: "#f97316", weight: 1.5, dashArray: "6 6", fill: false,
+  }).addTo(mapLayers);
+
+  // Spread lines: thicker for a larger share, dashed when the wind is not
+  // carrying spores this way.
+  r.sources.forEach((s) => {
+    L.polyline([[s.lat, s.lon], here], {
+      color: BAND_COLOUR[s.alert], weight: 1.5 + s.share * 10, opacity: .75,
+      dashArray: s.wind_toward_you ? null : "4 6",
+    }).bindTooltip(`${s.name} → here: ${Math.round(s.distance_km)} km, ${pct(s.share)} of incoming`)
+      .addTo(mapLayers);
+    const colour = BAND_COLOUR[s.alert];
+    const m = L.circleMarker([s.lat, s.lon], { radius: 9, band: colour, ...markerStyle(colour) })
+      .bindPopup(`<b>${esc(s.name)}</b>, ${esc(s.state)}<br>
+        <span class="pill ${s.alert}">${ALERT_WORD[s.alert]}</span><br>
+        ${SOURCE_STATE(s.infection)} · ${Math.round(s.distance_km)} km ${s.direction} of here<br>
+        ${s.wind_toward_you ? "Wind blowing toward you" : "Wind not toward you"} · ${pct(s.share)} of incoming`)
+      .addTo(mapLayers);
+    m.on("click", () => focusCard(s.site_id));
+    districtMarkers[s.site_id] = m;
+  });
+
+  const pin = L.circleMarker(here, {
+    radius: 11, color: "#ffffff", weight: 3, fillColor: "#f97316", fillOpacity: 1,
+  }).bindPopup(`<span class="pin-label">${esc(placeName(r))}</span><br>
+    <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span> risk ${pct(r.risk)} today`)
+    .addTo(mapLayers);
+  districtMarkers.here = pin;
+  leafletMap.invalidateSize();
+  leafletMap.fitBounds(ring.getBounds().pad(0.05));
 }
 
 /* Reload with ?api= so the URL on screen is the link to share. */

@@ -187,16 +187,22 @@ The network therefore has to learn the quantitative relationship from data.
 
 ## The web report
 
-`python scripts/06_serve.py` serves a document-style report at
-<http://127.0.0.1:8000>. It opens with the **18-paper literature survey**, and
-every row carries a *Run demonstration* button that executes the corresponding
-capability against the live system — the graph being built, the physics
-constraints being evaluated, the epidemic spreading, the forecast running. The
-survey stops being a table and becomes an argument you can audit.
+`python scripts/06_serve.py` (or `09_go_live.py`, below) serves the dashboard at
+<http://127.0.0.1:8000>, in five sections:
 
-Later sections cover the consolidated research gap, the methodology block by
-block, the dataset and its honest provenance, single-image inference, the
-regional risk map, and the results tables.
+1. **Overview** - the problem, the approach, the dataset at a glance
+2. **District Alerts** - the bulletin, the risk heatmap and the location view
+3. **Live Diagnosis** - upload or load a leaf and run the full pipeline
+4. **Project Status** - completion computed from artefacts on disk
+5. **How it works** - press *Play* and one held-out test leaf goes through the
+   live pipeline while an animated diagram lights up block by block (inputs ->
+   vision transformer, disease weather, farm network -> fusion, graph network ->
+   diagnosis, 7-day forecast -> what to do), each showing what it actually
+   produced. The model runs in about 20 ms; the steps are paced for people to
+   follow, and every value and timing shown is the one the server measured
+
+The literature survey, ablations and parameter tables remain in the API
+(`/api/literature`, `/api/demo/*`, `/api/parameters`) and in `outputs/reports/`.
 
 ## For decision-makers: the district alert bulletin
 
@@ -225,6 +231,24 @@ department. A single diagnosed leaf gets the same treatment - the disease in
 plain words, its spread risk, and what the farmer and the officials should do.
 
 **Print bulletin** produces a paper copy of the bulletin alone.
+
+### Risk heatmap
+
+Beneath the district circles the map shades a 1 degree grid (about 110 km)
+across everywhere within 350 km of a monitored district - 341 cells. Every cell
+is computed exactly as a clicked location is: the weather recorded at that cell
+through the pathogen physics, plus disease arriving on the wind
+(`serve/heatmap.py`, `GET /api/heatmap`). Three layers - disease-favourable
+weather, disease arriving, combined risk - each for today or the worst day of the
+coming week. The surface is pinned to each district's own reading by
+inverse-distance weighting, so at every district it equals that district's alert
+exactly, and it is clipped to land. Hovering reads the value at any point;
+clicking assesses that spot.
+
+Grid weather is one archive lookup per cell per date, fetched in batches and
+cached in `data/climate/grid/`; `09_go_live.py` prefetches the demo dates. The
+free archive allows about 600 lookups a minute, so stepping through several new
+dates quickly can briefly hit the limit - the page says so and retries.
 
 ### Near a precise location
 

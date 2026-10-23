@@ -50,18 +50,12 @@
     <li><a href="#s-alerts">District Alerts</a></li>
     <li><a href="#s-system">Live Diagnosis</a></li>
     <li><a href="#s-status">Project Status</a></li>
-    <li class="toc-group">How it works</li>
-    <li><a href="#s-survey">Literature Survey</a></li>
-    <li><a href="#s-gap">Research Gap</a></li>
-    <li><a href="#s-method">Methodology</a></li>
-    <li><a href="#s-data">Dataset</a></li>
-    <li><a href="#s-params">Parameters</a></li>
-    <li><a href="#s-results">Results</a></li>
-    <li><a href="#s-conclusion">Conclusion</a></li>
+    <li><a href="#s-how">How it works</a></li>
   </ol>
   <div class="toc-note">
-    Start with <b>District Alerts</b> for the regional picture, then
-    <b>Live Diagnosis</b> to test a single leaf.
+    Start with <b>District Alerts</b> for the regional picture,
+    <b>Live Diagnosis</b> to test a single leaf, and <b>How it works</b>
+    to watch one leaf go through the system.
   </div>
 </aside>
 
@@ -150,14 +144,31 @@
   <div class="alert-grid">
     <div class="map-col">
       <div class="map-tools">
-        <label class="inline"><input type="checkbox" id="showEdges" checked> Show spread links</label>
-        <span class="legend"><span><i class="sw high"></i>Act now</span><span><i class="sw med"></i>Watch</span><span><i class="sw low"></i>Normal</span></span>
+        <label for="heatLayer">Heatmap</label>
+        <select id="heatLayer">
+          <option value="weather" selected>Disease-favourable weather</option>
+          <option value="spread">Disease arriving (simulated spread)</option>
+          <option value="risk">Combined risk</option>
+          <option value="off">Off</option>
+        </select>
+        <select id="heatWhen" aria-label="Heatmap time window">
+          <option value="week" selected>Worst in next 7 days</option>
+          <option value="today">Today</option>
+        </select>
+        <label class="inline"><input type="checkbox" id="showEdges" checked> Spread links</label>
+      </div>
+      <div class="heat-legend" id="heatLegend">
+        <div class="hl-bar"></div>
+        <div class="hl-ticks"><span>0%</span><span style="left:25%">25% Watch</span><span style="left:55%">55% Act now</span><span style="left:100%">100%</span></div>
+        <div class="hl-read" id="heatRead">Hover the map to read the value at any point &middot; click to assess that spot</div>
       </div>
       <div id="leaflet"></div>
     </div>
     <div class="alert-list" id="alertList"><p class="placeholder">Loading bulletin&hellip;</p></div>
   </div>
-  <p class="micro" id="bNote">Risk is computed from the weather recorded at each district.
+  <p class="micro" id="bNote">Shading is a 1&deg; grid (about 110 km) of the weather recorded across the
+    region, pinned to each district's own reading, and drawn on land only. Circles are the monitored
+    districts. Risk is computed from the weather recorded at each district.
     For a chosen location it combines the weather recorded at that exact spot with disease
     arriving from nearby districts on the wind, as simulated by the project's epidemic model.
     The 7-day outlook replays the weather that actually followed (a hindcast); in deployment the
@@ -275,189 +286,83 @@
   </div>
 </section>
 
-<!-- 5. LITERATURE SURVEY -->
-<section id="s-survey">
-  <h2><span class="num">5</span> Literature Survey</h2>
-  <p class="sub-lead">
-    18 works across transformer plant pathology, physics-informed modelling and
-    graph learning. Each row states the gap it leaves &mdash; and runs the component
-    that closes it.
-  </p>
+<!-- 5. HOW IT WORKS -->
+<section id="s-how">
+  <h2><span class="num">5</span> How it works</h2>
+  <p class="sub-lead">One real leaf the model never saw during training, traced from input to output
+    through the live system. Each block lights up as it runs and shows what it actually produced.</p>
 
-  <div class="survey-controls">
-    <input type="search" id="surveySearch" placeholder="Filter by title, method or gap…">
-    <span class="count" id="surveyCount"></span>
+  <div class="how-bar">
+    <button class="run cta" id="howPlay" type="button">&#9654; Play with a real leaf</button>
+    <span class="how-step" id="howStep"></span>
   </div>
 
-  <div id="surveyList" class="survey-list">
-    <p class="loading">Loading survey&hellip;</p>
-  </div>
-</section>
-
-<!-- 6. RESEARCH GAP -->
-<section id="s-gap">
-  <h2><span class="num">6</span> Research Gap</h2>
-  <p class="sub-lead">Six gaps consolidated from the survey, and the component that
-    closes each one.</p>
-  <div class="table-scroll">
-    <table class="ruled compact gap-table">
-      <thead><tr><th>Gap in the literature</th><th>Addressed by</th></tr></thead>
-      <tbody>
-        <tr><td>Image-based detection only</td><td>Classification is one of two heads; the second forecasts future risk</td></tr>
-        <tr><td>Climate not integrated with visual features</td><td>FiLM-gated fusion lets climate modulate the visual representation</td></tr>
-        <tr><td>Spread between farms not captured</td><td>Spatio-temporal graph with directed downwind edges, 37 districts</td></tr>
-        <tr><td>Physics knowledge not unified with prediction</td><td>Four agronomic constraints enter the objective as a soft physics loss</td></tr>
-        <tr><td>Identification, not 1&ndash;7 day forecasting</td><td>Multi-horizon forecaster over 1, 3, 5 and 7 days</td></tr>
-        <tr><td>No geospatial view of affected areas</td><td>District alert bulletin and risk map (Section 2)</td></tr>
-      </tbody>
-    </table>
-  </div>
-</section>
-
-<!-- 7. METHODOLOGY -->
-<section id="s-method">
-  <h2><span class="num">7</span> Methodology</h2>
-  <div id="methodFlow" class="method-flow"></div>
-
-  <div class="grid-2 demo-pair">
-    <div class="tile">
-      <h3>7.1 &ensp;Agronomic knowledge base</h3>
-      <ul class="tight">
-        <li>Analytis beta model for temperature response</li>
-        <li>Moisture term differs <b>per organism</b></li>
-        <li>Several pathogens respond in opposite directions</li>
-      </ul>
-      <div class="demo-inline" data-demo="epidemiology">
-        <button class="run" data-demo="epidemiology">Run demonstration</button>
-        <div class="demo-out"></div>
+  <div class="flow" id="flow">
+    <svg class="flow-wires" id="flowWires" aria-hidden="true"></svg>
+    <div class="flow-col">
+      <div class="fcol-head">1 &middot; Inputs</div>
+      <div class="fnode in" data-node="leaf">
+        <div class="fn-top"><span class="fn-ico">&#128247;</span><span class="fn-title">Leaf photo</span></div>
+        <img class="fn-thumb" id="howThumb" alt="">
+        <div class="fn-out">From a farmer or field officer</div>
+      </div>
+      <div class="fnode in" data-node="weather">
+        <div class="fn-top"><span class="fn-ico">&#127782;</span><span class="fn-title">Weather at the farm</span></div>
+        <div class="fn-out">Recorded on that date</div>
+      </div>
+      <div class="fnode in" data-node="farms">
+        <div class="fn-top"><span class="fn-ico">&#128506;</span><span class="fn-title">Neighbouring farms</span></div>
+        <div class="fn-out">Reports from nearby districts</div>
       </div>
     </div>
-    <div class="tile">
-      <h3>7.2 &ensp;Physics-informed loss</h3>
-      <ul class="tight">
-        <li>Risk must rise with leaf wetness and humidity</li>
-        <li>Dry air must suppress fungal risk</li>
-        <li>Risk must be smooth across connected farms</li>
-        <li>Uncertainty must grow with horizon</li>
-      </ul>
-      <div class="demo-inline" data-demo="physics_constraints">
-        <button class="run" data-demo="physics_constraints">Run demonstration</button>
-        <div class="demo-out"></div>
+    <div class="flow-col">
+      <div class="fcol-head">2 &middot; Understand</div>
+      <div class="fnode" data-node="vision">
+        <div class="fn-top"><span class="fn-ico">&#129504;</span><span class="fn-title">Vision transformer</span></div>
+        <div class="fn-out">Reads the leaf</div>
+      </div>
+      <div class="fnode" data-node="climate">
+        <div class="fn-top"><span class="fn-ico">&#128167;</span><span class="fn-title">Disease weather</span></div>
+        <div class="fn-out">Leaf wetness, humidity, heat</div>
+      </div>
+      <div class="fnode" data-node="graph">
+        <div class="fn-top"><span class="fn-ico">&#128376;</span><span class="fn-title">Farm network</span></div>
+        <div class="fn-out">Which farms are linked</div>
+      </div>
+    </div>
+    <div class="flow-col">
+      <div class="fcol-head">3 &middot; Combine</div>
+      <div class="fnode" data-node="fusion">
+        <div class="fn-top"><span class="fn-ico">&#128279;</span><span class="fn-title">Fusion</span></div>
+        <div class="fn-out">Weather shapes how the leaf is read</div>
+      </div>
+      <div class="fnode" data-node="gnn">
+        <div class="fn-top"><span class="fn-ico">&#127760;</span><span class="fn-title">Graph neural network</span></div>
+        <div class="fn-out">Adds what neighbours report</div>
+      </div>
+    </div>
+    <div class="flow-col">
+      <div class="fcol-head">4 &middot; Predict</div>
+      <div class="fnode out" data-node="diagnosis">
+        <div class="fn-top"><span class="fn-ico">&#129658;</span><span class="fn-title">Diagnosis</span></div>
+        <div class="fn-out">Which disease, how sure</div>
+      </div>
+      <div class="fnode out" data-node="forecast">
+        <div class="fn-top"><span class="fn-ico">&#128200;</span><span class="fn-title">7-day risk forecast</span></div>
+        <div class="fn-out">Risk at +1, +3, +5, +7 days</div>
+      </div>
+    </div>
+    <div class="flow-col">
+      <div class="fcol-head">5 &middot; Act</div>
+      <div class="fnode out" data-node="advice">
+        <div class="fn-top"><span class="fn-ico">&#9989;</span><span class="fn-title">What to do</span></div>
+        <div class="fn-out">Advice for farmer and officials</div>
       </div>
     </div>
   </div>
-</section>
 
-<!-- 8. DATASET -->
-<section id="s-data">
-  <h2><span class="num">8</span> Dataset</h2>
-
-  <div class="grid-2">
-    <div>
-      <table class="ruled compact">
-        <thead><tr><th>Component</th><th>Source</th><th>Status</th></tr></thead>
-        <tbody>
-          <tr><td>54,305 leaf images &middot; 38 classes</td><td>PlantVillage</td><td><span class="tag-real">Real</span></td></tr>
-          <tr><td>41,662 site-days of weather</td><td>Open-Meteo ERA5</td><td><span class="tag-real">Real</span></td></tr>
-          <tr><td>37 farm districts</td><td>Indian production belts</td><td><span class="tag-real">Real</span></td></tr>
-          <tr><td>Image &rarr; (farm, date) pairing</td><td>Weighted by recorded weather</td><td><span class="tag-con">Constructed</span></td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div class="tile">
-      <h3>Verified, not asserted</h3>
-      <ul class="tight">
-        <li>Climate alone &rarr; <b>43.9%</b> on 38 classes</li>
-        <li>Random chance &rarr; 2.6% &middot; majority class &rarr; 10.4%</li>
-      </ul>
-      <p class="micro">Climate carries real signal, but the leaf image still does most
-        of the work &mdash; what a genuine forecasting problem looks like.</p>
-    </div>
-  </div>
-
-  <div class="grid-2 demo-pair">
-    <div class="demo-inline tile" data-demo="climate_niche">
-      <h3>Climate niche per disease</h3>
-      <button class="run" data-demo="climate_niche">Run demonstration</button>
-      <div class="demo-out"></div>
-    </div>
-    <div class="demo-inline tile" data-demo="graph_structure">
-      <h3>Build the spatial graph</h3>
-      <button class="run" data-demo="graph_structure">Run demonstration</button>
-      <div class="demo-out"></div>
-    </div>
-  </div>
-</section>
-
-<!-- 9. PARAMETERS -->
-<section id="s-params">
-  <h2><span class="num">9</span> Parameters</h2>
-  <p class="sub-lead">Read live from <code>configs/default.yaml</code> and the fitted
-    feature space, so it reports the run you are looking at. Open a group for the
-    reasoning behind each value.</p>
-  <div id="paramGroups" class="param-groups">
-    <p class="placeholder">Loading parameters&hellip;</p>
-  </div>
-</section>
-
-<!-- 10. RESULTS -->
-<section id="s-results">
-  <h2><span class="num">10</span> Results</h2>
-
-  <h3>10.1 &ensp;Vision transformer benchmark</h3>
-  <p class="sub-lead">Identical downstream pipeline; only the frozen backbone changes.</p>
-  <table class="ruled" id="benchTable"><tbody><tr><td class="placeholder">Run <code>scripts/03_benchmark_backbones.py</code></td></tr></tbody></table>
-
-  <h3>10.2 &ensp;Component ablations</h3>
-  <table class="ruled" id="ablTable"><tbody><tr><td class="placeholder">Run <code>scripts/04_train_and_ablate.py</code></td></tr></tbody></table>
-
-  <h3>10.3 &ensp;Graph value as observations get sparse</h3>
-  <table class="ruled" id="missingTable"><tbody><tr><td class="placeholder">Run <code>scripts/08_missing_data.py</code></td></tr></tbody></table>
-
-  <h3>10.4 &ensp;A negative result, reported</h3>
-  <div class="grid-2">
-    <div class="callout compact">
-      <b>The graph does not improve accuracy on this benchmark.</b>
-      <ul class="tight">
-        <li>Replacing it with a plain MLP <b>raises</b> macro-F1 and risk R&sup2;</li>
-        <li>Held across 2 datasets, 5 sparsity levels, 2 encoders</li>
-      </ul>
-    </div>
-    <div class="tile">
-      <h3>Why</h3>
-      <ul class="tight">
-        <li><b>No headroom.</b> A frozen ViT already hits ~98.8% from the image alone;
-          averaging in neighbours with <i>different</i> diseases only dilutes it</li>
-        <li><b>Own state is near-sufficient.</b> A farm predicts its own risk in 3 days
-          at r&nbsp;=&nbsp;0.83; neighbours reach 0.85 &mdash; better, but barely</li>
-      </ul>
-    </div>
-  </div>
-</section>
-
-<!-- 11. CONCLUSION -->
-<section id="s-conclusion">
-  <h2><span class="num">11</span> Conclusion</h2>
-  <div class="grid-2">
-    <div class="tile">
-      <h3>What worked</h3>
-      <ul class="tight">
-        <li>Frozen transformer &rarr; strong features, minutes to train</li>
-        <li>Engineered agro-meteorology &rarr; verified independent signal</li>
-        <li>Physics loss &rarr; agronomic behaviour without overriding data</li>
-        <li>Multi-horizon head &rarr; detection becomes anticipation</li>
-      </ul>
-    </div>
-    <div class="tile">
-      <h3>Remaining work</h3>
-      <ul class="tight">
-        <li>Validation against recorded outbreak records</li>
-        <li>Live forecast forcing instead of reanalysis</li>
-        <li>Farmer-facing mobile delivery</li>
-        <li>Manuscript write-up and submission</li>
-      </ul>
-    </div>
-  </div>
+  <div class="how-caption" id="howCaption">Press <b>Play</b> to watch one leaf go through the system,
+    step by step.</div>
 </section>
 
 </main>
@@ -471,6 +376,7 @@
 </footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="/static/js/app.js"></script>
 </body>

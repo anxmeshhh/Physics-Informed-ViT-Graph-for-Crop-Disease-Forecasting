@@ -6,9 +6,8 @@ const $ = (id) => document.getElementById(id);
 const BAND_COLOUR = { Low: "#16a34a", Medium: "#d97706", High: "#dc2626" };
 
 let riskChart = null, leafletMap = null, mapLayers = null, mapSatellite = false;
-let selectedFile = null, demoCatalogue = {}, papers = [];
+let selectedFile = null;
 let samples = [], sampleIdx = -1;
-const demoCharts = {};
 let pipeTimer = null, pipeStarted = 0;
 
 /* -------------------------------------------------------------- backend */
@@ -18,6 +17,7 @@ let pipeTimer = null, pipeStarted = 0;
    from the last backend this browser connected to - tried only after the same
    origin fails, so a stale tunnel can never shadow the server the page came from. */
 const API_KEY = "cropcast.api";
+const API_LEVEL = 4;            // the server this page needs; see api.py
 let API = "";
 const api = (path) => API + path;
 const cleanUrl = (u) => (u || "").trim().replace(/\/+$/, "");
@@ -47,19 +47,6 @@ async function getJSON(url) {
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const pretty = (n) => String(n).replace(/___/g, " — ").replace(/_/g, " ");
-const fmt = (v) => (typeof v === "number"
-  ? (Number.isInteger(v) ? v.toLocaleString() : v.toFixed(4)) : esc(v ?? "—"));
-
-function table(rows, cols, opts = {}) {
-  if (!rows || !rows.length) return `<p class="placeholder">No rows.</p>`;
-  const head = cols.map(([, l]) => `<th>${esc(l)}</th>`).join("");
-  const body = rows.map((r) => {
-    const cls = opts.highlight && opts.highlight(r) ? ' class="best"' : "";
-    return `<tr${cls}>` + cols.map(([k], i) =>
-      `<td class="${i ? "n" : ""}">${fmt(r[k])}</td>`).join("") + "</tr>";
-  }).join("");
-  return `<div class="table-scroll"><table class="ruled compact"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
 
 /* ------------------------------------------------------------------- boot */
 async function boot() {
@@ -69,6 +56,10 @@ async function boot() {
     const el = $("sysStatus");
     el.className = h.model_trained ? "sys ok" : "sys bad";
     el.innerHTML = `System status: <b>${h.model_trained ? "model loaded" : "model not trained"}</b>`;
+    if ((h.api_level || 0) < API_LEVEL) {
+      el.className = "sys bad";
+      el.innerHTML = "Backend out of date: <b>restart scripts/09_go_live.py</b>";
+    }
     if (API) $("apiHost").textContent = `Backend: ${new URL(API).host}`;
   } catch {
     $("sysStatus").className = "sys bad";
@@ -79,13 +70,11 @@ async function boot() {
     $("apiForm").hidden = false;
     return;
   }
-  renderMethod();
-  await Promise.all([loadSummary(), loadSurvey(), loadSites(), loadCrops(),
-                     loadParameters(), loadProgress()]);
+  await Promise.all([loadSummary(), loadSites(), loadCrops(), loadProgress()]);
   updateMap();                  // the bulletin is the first thing an officer sees
   await loadSamples();          // needs siteSelect to be populated first
   initTOC();
-  bindDemoButtons(document);
+  layoutWires();
 }
 
 /* --------------------------------------------------------------- overview */
@@ -102,341 +91,6 @@ async function loadSummary() {
   $("keyFacts").innerHTML = facts
     .map(([v, l]) => `<div class="kf"><div class="v">${esc(v)}</div><div class="l">${esc(l)}</div></div>`)
     .join("");
-
-  if (d.backbones) renderBench(d.backbones);
-  if (d.ablations) renderAbl(d.ablations);
-  try {
-    const m = await getJSON("/api/demo/missing_data");
-    if (m.rows && m.rows.length) renderMissing(m.rows);
-  } catch { /* not generated yet */ }
-}
-
-function renderBench(rows) {
-  const best = Math.max(...rows.map((r) => r.full_macro_f1 ?? 0));
-  $("benchTable").outerHTML = `<div id="benchTable">` + table(rows, [
-    ["backbone", "Backbone"], ["dim", "Dim"],
-    ["probe_acc", "Probe acc."], ["probe_macro_f1", "Probe macro-F1"],
-    ["full_acc", "Full acc."], ["full_macro_f1", "Full macro-F1"],
-    ["risk_r2_mean", "Risk R²"],
-  ], { highlight: (r) => r.full_macro_f1 === best }) + `</div>`;
-}
-
-function renderAbl(rows) {
-  $("ablTable").outerHTML = `<div id="ablTable">` + table(rows, [
-    ["config", "Configuration"], ["test_acc", "Accuracy"],
-    ["test_macro_f1", "Macro-F1"], ["risk_r2_mean", "Risk R²"],
-    ["band_acc_mean", "Band acc."],
-  ], { highlight: (r) => (r.config || "").startsWith("FULL (") }) + `</div>`;
-}
-
-function renderMissing(rows) {
-  $("missingTable").outerHTML = `<div id="missingTable">` + table(rows, [
-    ["missing_fraction", "Farms without a photo"], ["encoder", "Encoder"],
-    ["test_acc", "Accuracy"], ["test_macro_f1", "Macro-F1"],
-    ["risk_r2_mean", "Risk R²"],
-  ]) + `</div>`;
-}
-
-/* -------------------------------------------------------- literature survey */
-async function loadSurvey() {
-  let d;
-  try { d = await getJSON("/api/literature"); }
-  catch (e) { $("surveyList").innerHTML = `<p class="err">${esc(e.message)}</p>`; return; }
-  papers = d.papers;
-  demoCatalogue = d.demos;
-  renderSurvey(papers);
-  $("surveySearch").addEventListener("input", (e) => {
-    const q = e.target.value.toLowerCase().trim();
-    renderSurvey(!q ? papers : papers.filter((p) =>
-      [p.title, p.method, p.gap, p.answer, p.authors].join(" ").toLowerCase().includes(q)));
-  });
-}
-
-function renderSurvey(list) {
-  $("surveyCount").textContent = `${list.length} of ${papers.length} works`;
-  $("surveyList").innerHTML = list.map((p) => {
-    const demo = demoCatalogue[p.demo] || {};
-    return `
-    <article class="paper" data-no="${p.no}">
-      <div class="paper-head">
-        <div class="paper-no">[${p.no}]</div>
-        <div>
-          <div class="paper-title">${esc(p.title)}</div>
-          <div class="paper-authors">${esc(p.authors && p.authors !== "—" ? p.authors + " · " : "")}${esc(p.method)}</div>
-        </div>
-        <div class="chev">▾</div>
-      </div>
-      <div class="paper-body">
-        <div class="field plain"><div class="k">Key contribution</div>${esc(p.contribution)}</div>
-        <div class="grid-2">
-          <div class="field gap"><div class="k">Research gap</div>${esc(p.gap)}</div>
-          <div class="field ans"><div class="k">Addressed by</div>${esc(p.answer)}
-            <div class="modref">${esc(p.module)}</div></div>
-        </div>
-        <div class="demo-inline" data-demo="${p.demo}">
-          <button class="run" data-demo="${p.demo}">Run demonstration — ${esc(demo.title || p.demo)}</button>
-          <div class="demo-out"></div>
-        </div>
-      </div>
-    </article>`;
-  }).join("");
-
-  $("surveyList").querySelectorAll(".paper-head").forEach((h) => {
-    h.addEventListener("click", () => h.parentElement.classList.toggle("open"));
-  });
-  bindDemoButtons($("surveyList"));
-}
-
-/* ------------------------------------------------------------ demonstrations */
-function bindDemoButtons(root) {
-  root.querySelectorAll("button.run[data-demo]").forEach((btn) => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.demo;
-      const out = btn.parentElement.querySelector(".demo-out");
-      const label = btn.textContent;
-      btn.disabled = true; btn.textContent = "Running…";
-      try {
-        const data = await getJSON(`/api/demo/${id}`);
-        out.innerHTML = renderDemo(id, data);
-        const cv = out.querySelector("canvas");
-        if (cv && data.kind === "epidemiology") drawResponseCurves(cv, data);
-        if (cv && data.kind === "forecast") drawTrajectory(cv, data);
-      } catch (err) {
-        out.innerHTML = `<p class="err">${esc(err.message)}</p>`;
-      } finally {
-        btn.disabled = false; btn.textContent = label;
-      }
-    });
-  });
-}
-
-function demoHeader(id) {
-  const d = demoCatalogue[id] || {};
-  return `<h4>${esc(d.title || id)}</h4>` +
-         (d.blurb ? `<p class="blurb">${esc(d.blurb)}</p>` : "");
-}
-
-function renderDemo(id, d) {
-  const head = demoHeader(id);
-  const note = d.note ? `<div class="demo-note">${esc(d.note)}</div>` : "";
-
-  if (d.kind === "contagion") {
-    const pr = d.params;
-    return head + `
-      <p class="blurb">Epidemic constants — primary inoculum ε = ${pr.epsilon},
-        local build-up β = ${pr.beta}, <b>between-farm transmission γ = ${pr.gamma}</b>,
-        recovery = ${pr.recovery}, dispersal length ${pr.length_scale_km} km,
-        downwind boost ×${pr.wind_boost}.</p>
-      <div class="sub">Does a farm's future depend on its neighbours?</div>` +
-      table(d.autocorrelation, [
-        ["lag_days", "Lag (days)"],
-        ["own_pressure_vs_future", "Own state → future"],
-        ["neighbour_pressure_vs_future", "Neighbours → future"],
-      ]) +
-      `<div class="sub">Largest simulated outbreak: ${esc(d.peak.site_id)} on ${esc(d.peak.date)}</div>` +
-      table(d.timeline, [
-        ["date", "Date"], ["focus_pressure", "Pressure at focus farm"],
-        ["highest_elsewhere", "Highest elsewhere"],
-      ]) + note;
-  }
-
-  if (d.kind === "graph") {
-    const s = d.summary, st = d.settings;
-    return head + `
-      <div class="pairs">
-        <div><div class="pk">Nodes</div><div class="pv">${s.num_nodes.toLocaleString()}</div></div>
-        <div><div class="pk">Edges</div><div class="pv">${s.num_edges.toLocaleString()}</div></div>
-        <div><div class="pk">Downwind</div><div class="pv">${s.downwind_edges.toLocaleString()}</div></div>
-        <div><div class="pk">Mean degree</div><div class="pv">${s.mean_in_degree.toFixed(1)}</div></div>
-      </div>
-      <div class="sub">Settings</div>
-      <p class="blurb">k = ${st.k_neighbours}, radius = ${st.radius_km} km,
-        time window = ±${st.time_window_days} days, same-crop only = ${st.same_crop_only}</p>
-      <div class="sub">Sample edges</div>` +
-      table(d.examples, [
-        ["from_site", "From"], ["from_date", "Date"], ["to_site", "To"],
-        ["crop", "Crop"], ["days_apart", "Δ days"],
-        ["wind_alignment", "Wind align."], ["downwind", "Downwind"],
-      ]) + note;
-  }
-
-  if (d.kind === "physics") {
-    return head + table(d.checks, [
-      ["constraint", "Constraint"],
-      ["legal_case", "Compliant behaviour"], ["legal_penalty", "Penalty"],
-      ["illegal_case", "Violating behaviour"], ["illegal_penalty", "Penalty"],
-    ]) + `<p class="blurb">λ = ${d.lambda}; term weights ${esc(JSON.stringify(d.weights))}</p>` + note;
-  }
-
-  if (d.kind === "epidemiology") {
-    const w = d.wet_day, dry = d.dry_day;
-    return head + `
-      <div class="pairs">
-        <div><div class="pk">Wettest day (${esc(w.date)})</div>
-             <div class="pv">${w.temperature_C} °C</div>
-             <div class="pk">${w.humidity_pct}% RH · ${w.leaf_wetness_h} h wet · VPD ${w.vpd_kPa}</div></div>
-        <div><div class="pk">Driest day (${esc(dry.date)})</div>
-             <div class="pv">${dry.temperature_C} °C</div>
-             <div class="pk">${dry.humidity_pct}% RH · ${dry.leaf_wetness_h} h wet · VPD ${dry.vpd_kPa}</div></div>
-      </div>` +
-      table(d.rows, [
-        ["disease", "Pathogen"], ["t_opt", "T opt (°C)"], ["moisture_mode", "Moisture mode"],
-        ["favourability_wet_day", "Favourability, wet day"],
-        ["favourability_dry_day", "Favourability, dry day"],
-      ]) + `<canvas height="150"></canvas>` + note;
-  }
-
-  if (d.kind === "niche") {
-    const rows = d.rows.slice(0, 10).concat(d.rows.slice(-6));
-    return head + table(rows, [
-      ["class_name", "Class"], ["n", "Images"], ["temperature_C", "Temp (°C)"],
-      ["humidity_pct", "RH (%)"], ["leaf_wetness_h", "Leaf wetness (h)"],
-      ["vpd_kPa", "VPD (kPa)"],
-    ]) + note;
-  }
-
-  if (d.kind === "forecast") {
-    return head + `<p class="blurb">Highest-risk farm for
-      ${esc(pretty(d.crop))} on ${esc(d.date)}: <b>${esc(d.site.name)}, ${esc(d.site.state)}</b></p>` +
-      table(d.trajectory, [
-        ["horizon_days", "Horizon (d)"], ["date", "Date"], ["risk", "Risk"],
-        ["temperature_C", "Temp (°C)"], ["humidity_pct", "RH (%)"],
-        ["leaf_wetness_h", "Leaf wetness (h)"],
-      ]) + `<canvas height="140"></canvas>` + note;
-  }
-
-  if (d.kind === "map") {
-    return head + table(d.sites.slice(0, 12), [
-      ["name", "Farm"], ["state", "State"], ["risk", "Risk"], ["band", "Band"],
-      ["temperature_C", "Temp (°C)"], ["leaf_wetness_h", "Leaf wetness (h)"],
-    ]) + note;
-  }
-
-  if (d.kind === "node") {
-    return head + table(d.streams, [
-      ["stream", "Stream"], ["dims", "Dimensions"],
-      ["source", "Source"], ["example", "Contents"],
-    ]) + `<p class="blurb">Fused to ${d.fused_dim} dimensions before message passing.</p>` + note;
-  }
-
-  if (d.kind === "table") {
-    if (!d.rows || !d.rows.length) {
-      return head + `<p class="placeholder">${esc(d.note || "Not generated yet.")}</p>`;
-    }
-    const cols = d.columns.filter((c) =>
-      !["checkpoint", "family", "pool", "masked_stream", "physics", "encoder"].includes(c)
-    ).slice(0, 7).map((c) => [c, c.replace(/_/g, " ")]);
-    return head + `<p class="blurb">${esc(d.caption || "")}</p>` + table(d.rows, cols);
-  }
-
-  return head + `<pre>${esc(JSON.stringify(d, null, 2)).slice(0, 2000)}</pre>`;
-}
-
-function drawResponseCurves(canvas, d) {
-  new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: d.temps,
-      datasets: Object.entries(d.curves).map(([name, vals], i) => ({
-        label: name.split("___")[1].replace(/_/g, " ").slice(0, 22),
-        data: vals, borderWidth: 2, pointRadius: 0, tension: .3,
-        borderColor: ["#15803d", "#ea580c", "#0f766e", "#d97706", "#2563eb"][i % 5],
-      })),
-    },
-    options: {
-      plugins: { legend: { labels: { boxWidth: 12, font: { size: 11 } } } },
-      scales: {
-        x: { title: { display: true, text: "temperature (°C)" },
-             ticks: { maxTicksLimit: 10, callback: (v, i) => Math.round(d.temps[i]) } },
-        y: { title: { display: true, text: "relative development rate" }, min: 0, max: 1 },
-      },
-    },
-  });
-}
-
-function drawTrajectory(canvas, d) {
-  new Chart(canvas, {
-    type: "line",
-    data: {
-      labels: d.trajectory.map((t) => `+${t.horizon_days}d`),
-      datasets: [{
-        label: "agronomic risk", data: d.trajectory.map((t) => t.risk),
-        borderColor: "#7a1f2b", backgroundColor: "rgba(122,31,43,.10)",
-        fill: true, tension: .3, pointRadius: 4,
-      }],
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { min: 0, max: 1 } },
-    },
-  });
-}
-
-/* ------------------------------------------------------------- methodology */
-function renderMethod() {
-  const steps = [
-    ["Input layer",
-     "A leaf photograph, the meteorology actually recorded at that farm on that date, and the farm's location and metadata.",
-     ["RGB leaf image", "Open-Meteo ERA5", "latitude / longitude / altitude", "soil, crop, season"]],
-    ["Feature extraction and engineering",
-     "A frozen vision transformer encodes the leaf; raw weather becomes the quantities plant pathologists use; the spatial graph is built from location and time.",
-     ["DINOv2-S (frozen)", "VPD · leaf wetness · GDD", "3/7/14-day windows", "KNN + radius search"]],
-    ["Feature fusion",
-     "The three streams are projected to a common width and fused, with climate modulating the visual stream multiplicatively.",
-     ["FiLM gating", "vision ⊕ climate ⊕ metadata"]],
-    ["Graph neural network",
-     "Message passing over the spatio-temporal farm graph yields spatially aware embeddings; directed downwind edges encode wind-borne spore transport.",
-     ["GraphSAGE / GCN / GAT", "residual + layer norm", "downwind edges"]],
-    ["Prediction and physics-informed loss",
-     "A 38-class disease head for the current leaf, plus an autoregressive forecaster for 1, 3, 5 and 7 days, trained under agronomic constraints.",
-     ["classification head", "multi-horizon forecaster", "CE + λ · physics"]],
-    ["Explainability",
-     "Attention rollout and Grad-CAM over the leaf, integrated gradients and SHAP over the weather variables, gradient attribution over graph edges.",
-     ["Grad-CAM", "attention rollout", "integrated gradients", "SHAP", "graph attribution"]],
-  ];
-  $("methodFlow").innerHTML = steps.map(([t, b, tags], i) => `
-    <div class="mstep">
-      <div class="mn">${i + 1}</div>
-      <div><h4>${esc(t)}</h4><p>${esc(b)}</p>
-        <div class="tags">${tags.map((x) => `<span class="tag">${esc(x)}</span>`).join("")}</div>
-      </div>
-    </div>`).join("");
-}
-
-/* -------------------------------------------------------------- parameters */
-async function loadParameters() {
-  let d;
-  try { d = await getJSON("/api/parameters"); } catch {
-    $("paramGroups").innerHTML =
-      `<p class="placeholder">Parameters unavailable &mdash; backend offline.</p>`;
-    return;
-  }
-  /* Collapsed by default: 34 rows of justification is the right depth for a
-     question from the floor, and the wrong amount to scroll past to reach the
-     live demo. The first group stays open so the shape is obvious. */
-  $("paramGroups").innerHTML = d.groups.map((g, i) => `
-    <details class="param-group" id="p-${esc(g.id)}"${i === 0 ? " open" : ""}>
-      <summary>
-        <span class="pg-title">${esc(g.title)}</span>
-        <span class="pg-count">${g.rows.length}</span>
-      </summary>
-      <div class="pg-body">
-        <p class="micro">${esc(g.lead)}</p>
-        <div class="table-scroll">
-          <table class="ruled compact param-table">
-            <thead><tr><th>Parameter</th><th>Value</th><th>Why this value</th></tr></thead>
-            <tbody>${g.rows.map(([k, v, why]) => `
-              <tr><td>${esc(k)}</td><td class="pv">${fmt(v)}</td>
-                  <td class="pw">${esc(why)}</td></tr>`).join("")}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </details>`).join("");
 }
 
 /* ---------------------------------------------------------------- progress */
@@ -879,10 +533,13 @@ function initMap() {
     leafletMap.setMaxZoom(mapSatellite ? 18 : 16);
     mapLayers.eachLayer(restyle);
   });
+  leafletMap.createPane("heat");
+  leafletMap.getPane("heat").style.zIndex = 350;      // above tiles, below markers and labels
+  leafletMap.getPane("heat").classList.add("heat-pane");
   mapLayers = L.layerGroup().addTo(leafletMap);
-  leafletMap.on("click", (e) => {
-    if (viewMode === "near") choosePoint(e.latlng.lat, e.latlng.lng, "Pinned location");
-  });
+  // Anywhere on the map, in either view: the heatmap invites "what about here?"
+  leafletMap.on("click", (e) => choosePoint(e.latlng.lat, e.latlng.lng, "Pinned location"));
+  leafletMap.on("mousemove", readHeat);
 
   // Leaflet sizes its tile grid once and does not re-measure on its own, so a
   // window resize leaves tiles hanging past the new viewport width.
@@ -948,6 +605,7 @@ async function updateMap() {
       `/api/bulletin?crop=${encodeURIComponent($("mapCrop").value)}&date=${$("mapDate").value}`);
     renderBulletin(bulletin);
     drawBulletinMap(bulletin, true);
+    refreshHeat();
   } catch (err) {
     $("bulletinHead").hidden = true;
     $("alertList").innerHTML = `<p class="err">${esc(err.message)}</p>`;
@@ -1070,7 +728,7 @@ function drawBulletinMap(b, fit) {
     b.edges.forEach((e) => {
       const a = byId[e.source], t = byId[e.target];
       if (!a || !t) return;
-      L.polyline([[a.lat, a.lon], [t.lat, t.lon]], { ...edgeStyle(), edge: true })
+      L.polyline([[a.lat, a.lon], [t.lat, t.lon]], { ...edgeStyle(), edge: true, bubblingMouseEvents: false })
         .bindTooltip(`${a.name} → ${t.name}: ${Math.round(e.distance_km)} km`).addTo(mapLayers);
     });
   }
@@ -1079,6 +737,7 @@ function drawBulletinMap(b, fit) {
     const colour = BAND_COLOUR[r.alert];
     const m = L.circleMarker([r.lat, r.lon], {
       radius: 7 + Math.max(r.risk, r.peak_risk) * 11, band: colour, ...markerStyle(colour),
+      bubblingMouseEvents: false,
     }).bindPopup(`<b>${esc(r.name)}</b>, ${esc(r.state)}<br>
       <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span><br>
       Risk today <b>${pct(r.risk)}</b> · next 7 days: ${esc(outlookText(r))}<br>
@@ -1202,6 +861,7 @@ async function assessPoint() {
     const r = await getJSON(`/api/nearby?${q}`);
     renderNear(r);
     drawNearMap(r);
+    refreshHeat();
   } catch (err) {
     $("bulletinHead").hidden = true;
     $("alertList").innerHTML = `<p class="err">${esc(err.message)}</p>`;
@@ -1277,11 +937,12 @@ function drawNearMap(r) {
   r.sources.forEach((s) => {
     L.polyline([[s.lat, s.lon], here], {
       color: BAND_COLOUR[s.alert], weight: 1.5 + s.share * 10, opacity: .75,
-      dashArray: s.wind_toward_you ? null : "4 6",
+      dashArray: s.wind_toward_you ? null : "4 6", bubblingMouseEvents: false,
     }).bindTooltip(`${s.name} → here: ${Math.round(s.distance_km)} km, ${pct(s.share)} of incoming`)
       .addTo(mapLayers);
     const colour = BAND_COLOUR[s.alert];
-    const m = L.circleMarker([s.lat, s.lon], { radius: 9, band: colour, ...markerStyle(colour) })
+    const m = L.circleMarker([s.lat, s.lon], { radius: 9, band: colour, ...markerStyle(colour),
+      bubblingMouseEvents: false })
       .bindPopup(`<b>${esc(s.name)}</b>, ${esc(s.state)}<br>
         <span class="pill ${s.alert}">${ALERT_WORD[s.alert]}</span><br>
         ${SOURCE_STATE(s.infection)} · ${Math.round(s.distance_km)} km ${s.direction} of here<br>
@@ -1293,12 +954,387 @@ function drawNearMap(r) {
 
   const pin = L.circleMarker(here, {
     radius: 11, color: "#ffffff", weight: 3, fillColor: "#f97316", fillOpacity: 1,
+    bubblingMouseEvents: false,
   }).bindPopup(`<span class="pin-label">${esc(placeName(r))}</span><br>
     <span class="pill ${r.alert}">${ALERT_WORD[r.alert]}</span> risk ${pct(r.risk)} today`)
     .addTo(mapLayers);
   districtMarkers.here = pin;
   leafletMap.invalidateSize();
   leafletMap.fitBounds(ring.getBounds().pad(0.05));
+}
+
+/* ----------------------------------------------------------------- heatmap */
+/* Every grid cell is computed server-side exactly as a clicked location is:
+   the weather recorded there through the pathogen physics, plus disease
+   arriving on the wind. The page only interpolates between cells, pins the
+   surface to each district's own reading, and clips it to land. */
+let heatData = null, heatKey = "", heatOverlay = null, landMask = null;
+const HEAT_PX = 18;                    // canvas pixels per degree of longitude
+const ANCHOR_REACH_KM = 50;            // how far a district's own reading reaches
+const GRID_WEIGHT_KM = 35;             // the grid counts as a reading this far away
+const HEAT_STOPS = [[0, [22, 163, 74]], [0.25, [234, 179, 8]], [0.55, [249, 115, 22]],
+                    [0.8, [220, 38, 38]], [1, [153, 27, 27]]];
+const HEAT_NAME = { weather: "Disease-favourable weather", spread: "Disease arriving",
+                    risk: "Combined risk" };
+
+function heatColour(v) {
+  for (let k = 1; k < HEAT_STOPS.length; k++) {
+    const [b, cb] = HEAT_STOPS[k];
+    if (v <= b) {
+      const [a, ca] = HEAT_STOPS[k - 1];
+      const t = (v - a) / (b - a);
+      return ca.map((c, i) => Math.round(c + t * (cb[i] - c)));
+    }
+  }
+  return HEAT_STOPS[HEAT_STOPS.length - 1][1];
+}
+
+// Web Mercator, which is how Leaflet stretches an image overlay.
+const mercY = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360));
+const mercLat = (y) => (360 / Math.PI) * Math.atan(Math.exp(y)) - 90;
+const kmBetween = (a1, o1, a2, o2) => {
+  const r = Math.PI / 180, dA = (a2 - a1) * r, dO = (o2 - o1) * r;
+  const h = Math.sin(dA / 2) ** 2 + Math.cos(a1 * r) * Math.cos(a2 * r) * Math.sin(dO / 2) ** 2;
+  return 12742 * Math.asin(Math.sqrt(Math.min(1, h)));
+};
+
+/* [value, cover] at any point: bilinear between the four surrounding cells
+   (empty cells dropped and the weights renormalised), then pinned to nearby
+   districts for the weather layer - the only layer the districts measure
+   directly. cover is how much of the neighbourhood holds data, which fades the
+   shading out over the last cell instead of ending in a 1 degree staircase. */
+function heatSampler() {
+  const d = heatData, layer = $("heatLayer").value, when = $("heatWhen").value;
+  const grid = d.layers[layer][when];
+  const anchors = layer === "weather" ? d.anchors : [];
+  return (lat, lon) => {
+    const fi = (lat - d.lats[0]) / d.step, fj = (lon - d.lons[0]) / d.step;
+    const i0 = Math.floor(fi), j0 = Math.floor(fj);
+    let sw = 0, sv = 0;
+    for (const [i, j, w] of [[i0, j0, (1 - (fi - i0)) * (1 - (fj - j0))], [i0 + 1, j0, (fi - i0) * (1 - (fj - j0))],
+                             [i0, j0 + 1, (1 - (fi - i0)) * (fj - j0)], [i0 + 1, j0 + 1, (fi - i0) * (fj - j0)]]) {
+      const v = grid[i] && grid[i][j];
+      if (v != null && w > 0) { sw += w; sv += w * v; }
+    }
+    const g = sw > 0 ? sv / sw : NaN;
+    // Inverse-distance pinning: a district's reading is reproduced exactly at
+    // the district, dominates within ~20 km, and has faded into the grid by
+    // ~60 km. Two close districts (Indore and Ujjain, 50 km) each stay exact.
+    let U = 0, A = 0, reach = 0;
+    for (const a of anchors) {
+      if (Math.abs(a.lat - lat) > 1 || Math.abs(a.lon - lon) > 1) continue;
+      const d = kmBetween(lat, lon, a.lat, a.lon);
+      if (d < 0.5) return [a[when], 1];
+      const taper = Math.exp(-((d / ANCHOR_REACH_KM) ** 2));
+      U += taper / (d * d); A += (taper / (d * d)) * a[when]; reach += taper;
+    }
+    if (U === 0) return [g, sw];
+    const cover = Math.max(sw, Math.min(1, reach));
+    if (Number.isNaN(g)) return reach > 0.05 ? [A / U, cover] : [NaN, 0];
+    const ug = 1 / (GRID_WEIGHT_KM * GRID_WEIGHT_KM);
+    return [(A + ug * g) / (U + ug), cover];
+  };
+}
+
+function heatBounds() {
+  const d = heatData, h = d.step / 2;
+  return { s: d.lats[0] - h, n: d.lats[d.lats.length - 1] + h,
+           w: d.lons[0] - h, e: d.lons[d.lons.length - 1] + h };
+}
+
+/* Land outline, drawn once into a mask in the overlay's own projection, so the
+   heat never bleeds into the sea. No country borders are drawn. */
+async function loadLand() {
+  if (landMask !== null) return landMask;
+  try {
+    const topo = await (await fetch("https://cdn.jsdelivr.net/npm/world-atlas@2.0.2/land-50m.json")).json();
+    landMask = topojson.feature(topo, topo.objects.land);
+  } catch { landMask = false; }        // offline: draw unclipped rather than not at all
+  return landMask;
+}
+
+function drawHeat() {
+  if (heatOverlay) { leafletMap.removeLayer(heatOverlay); heatOverlay = null; }
+  const off = $("heatLayer").value === "off";
+  $("heatWhen").disabled = off;
+  $("heatLegend").hidden = off;
+  if (off || !heatData) return;
+
+  const b = heatBounds();
+  const W = Math.round((b.e - b.w) * HEAT_PX);
+  const yN = mercY(b.n), yS = mercY(b.s);
+  const H = Math.round(W * (yN - yS) / ((b.e - b.w) * Math.PI / 180));
+  const cv = document.createElement("canvas");
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext("2d");
+  const img = ctx.createImageData(W, H);
+  const heatValue = heatSampler();
+  for (let y = 0; y < H; y++) {
+    const lat = mercLat(yN - ((y + 0.5) / H) * (yN - yS));
+    for (let x = 0; x < W; x++) {
+      const [v, cover] = heatValue(lat, b.w + ((x + 0.5) / W) * (b.e - b.w));
+      if (Number.isNaN(v) || cover <= 0) continue;
+      const c = Math.max(0, Math.min(1, v));
+      const [r, g, bl] = heatColour(c);
+      const k = (y * W + x) * 4;
+      const fade = cover * cover * (3 - 2 * cover);          // smoothstep
+      img.data[k] = r; img.data[k + 1] = g; img.data[k + 2] = bl;
+      img.data[k + 3] = Math.round(255 * (0.22 + 0.48 * c) * fade);
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+
+  if (landMask) {
+    const m = document.createElement("canvas");
+    m.width = W; m.height = H;
+    const mc = m.getContext("2d");
+    const px = ([lon, lat]) => [((lon - b.w) / (b.e - b.w)) * W, ((yN - mercY(lat)) / (yN - yS)) * H];
+    mc.beginPath();
+    const polys = landMask.geometry ? [landMask.geometry] : landMask.features.map((f) => f.geometry);
+    for (const geom of polys) {
+      const list = geom.type === "Polygon" ? [geom.coordinates] : geom.coordinates;
+      for (const poly of list) for (const ring of poly) {
+        if (!ring.some(([lo, la]) => lo > b.w - 5 && lo < b.e + 5 && la > b.s - 5 && la < b.n + 5)) continue;
+        ring.forEach((p, i) => { const [x, y] = px(p); i ? mc.lineTo(x, y) : mc.moveTo(x, y); });
+        mc.closePath();
+      }
+    }
+    mc.fill("evenodd");
+    ctx.globalCompositeOperation = "destination-in";
+    ctx.drawImage(m, 0, 0);
+  }
+
+  heatOverlay = L.imageOverlay(cv.toDataURL(), [[b.s, b.w], [b.n, b.e]], {
+    pane: "heat", interactive: false,
+  }).addTo(leafletMap);
+}
+
+async function refreshHeat() {
+  if ($("heatLayer").value === "off") { drawHeat(); return; }
+  const key = `${$("mapCrop").value}|${$("mapDate").value}`;
+  try {
+    if (key !== heatKey) {
+      $("heatRead").textContent = "Computing the risk surface from recorded weather…";
+      const [d] = await Promise.all([
+        getJSON(`/api/heatmap?crop=${encodeURIComponent($("mapCrop").value)}&date=${$("mapDate").value}`),
+        loadLand(),
+      ]);
+      heatData = d; heatKey = key;
+    }
+    drawHeat();
+    $("heatRead").textContent = `${heatData.cells} grid cells, each from the weather recorded there` +
+      " · hover to read a value · click to assess that spot";
+  } catch (err) {
+    heatData = null; heatKey = ""; drawHeat();
+    if (/rate-limit/i.test(err.message)) {
+      // The free weather archive allows ~600 lookups a minute; one new date
+      // uses 341. Wait it out once rather than leave the map bare.
+      $("heatRead").textContent = "The weather archive is busy - retrying in 30 seconds…";
+      setTimeout(() => {
+        if (key === `${$("mapCrop").value}|${$("mapDate").value}` && !heatData) refreshHeat();
+      }, 30000);
+    } else {
+      $("heatRead").textContent = err.message;
+    }
+  }
+}
+$("heatLayer").addEventListener("change", refreshHeat);
+$("heatWhen").addEventListener("change", drawHeat);
+
+function readHeat(e) {
+  if (!heatData || $("heatLayer").value === "off") return;
+  const [v] = heatSampler()(e.latlng.lat, e.latlng.lng);
+  const when = $("heatWhen").value === "week" ? "worst in next 7 days" : "today";
+  $("heatRead").textContent = Number.isNaN(v)
+    ? "Outside the monitored region"
+    : `${HEAT_NAME[$("heatLayer").value]} at ${e.latlng.lat.toFixed(2)}, ${e.latlng.lng.toFixed(2)}: ` +
+      `${pct(v)} (${when}) · ${ALERT_WORD[v > 0.55 ? "High" : v > 0.25 ? "Medium" : "Low"]}`;
+}
+
+/* ------------------------------------------------------------ how it works */
+/* One held-out test leaf, sent through the live pipeline, with each block of
+   the diagram lighting up in turn and showing what it really produced. The
+   model finishes in about 20 ms, so the steps are paced for people to follow;
+   every value and timing on screen is the one the server measured. */
+const FLOW_WIRES = [
+  ["leaf", "vision"], ["weather", "climate"], ["farms", "graph"],
+  ["vision", "fusion"], ["climate", "fusion"], ["fusion", "gnn"], ["graph", "gnn"],
+  ["gnn", "diagnosis"], ["gnn", "forecast"], ["diagnosis", "advice"], ["forecast", "advice"],
+];
+const HOW_DWELL_MS = 1500;
+const wireState = {};
+let howIdx = -1, howBusy = false;
+const flowNode = (id) => document.querySelector(`.fnode[data-node="${id}"]`);
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+
+document.querySelectorAll(".fnode .fn-out").forEach((el) => { el.dataset.idle = el.innerHTML; });
+
+function layoutWires() {
+  const flow = $("flow"), svg = $("flowWires");
+  // Stacked on a phone: the order of the blocks carries the flow, not wires.
+  if (getComputedStyle(flow).gridTemplateColumns.trim().split(/\s+/).length < 2) { svg.innerHTML = ""; return; }
+  const box = flow.getBoundingClientRect();
+  svg.setAttribute("viewBox", `0 0 ${box.width} ${box.height}`);
+  svg.innerHTML = FLOW_WIRES.map(([a, b]) => {
+    const ra = flowNode(a).getBoundingClientRect(), rb = flowNode(b).getBoundingClientRect();
+    const id = `w-${a}-${b}`, state = wireState[`${a}>${b}`] || "";
+    let d;
+    if (rb.left >= ra.right - 4) {          // next column: right edge to left edge
+      const x1 = ra.right - box.left, y1 = ra.top + ra.height / 2 - box.top;
+      const x2 = rb.left - box.left, y2 = rb.top + rb.height / 2 - box.top;
+      const mx = (x1 + x2) / 2;
+      d = `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`;
+    } else {                                // same column: straight down
+      const x = ra.left + ra.width / 2 - box.left;
+      d = `M${x},${ra.bottom - box.top} L${x},${rb.top - box.top}`;
+    }
+    const packet = state === "flow"
+      ? `<circle class="packet" r="5"><animateMotion dur="0.9s" repeatCount="indefinite"><mpath href="#${id}"/></animateMotion></circle>`
+      : "";
+    return `<path id="${id}" class="wire ${state}" d="${d}"/>${packet}`;
+  }).join("");
+}
+let wireTimer;
+window.addEventListener("resize", () => { clearTimeout(wireTimer); wireTimer = setTimeout(layoutWires, 120); });
+window.addEventListener("load", layoutWires);
+
+function resetFlow() {
+  Object.keys(wireState).forEach((k) => delete wireState[k]);
+  document.querySelectorAll(".fnode").forEach((n) => {
+    n.classList.remove("live", "done");
+    const out = n.querySelector(".fn-out");
+    out.innerHTML = out.dataset.idle;
+  });
+  $("howThumb").classList.remove("show");
+  layoutWires();
+}
+
+/* Close the step before: live blocks become done, flowing wires settle. */
+function settle() {
+  document.querySelectorAll(".fnode.live").forEach((n) => { n.classList.remove("live"); n.classList.add("done"); });
+  Object.keys(wireState).forEach((k) => { if (wireState[k] === "flow") wireState[k] = "done"; });
+}
+
+function stage(wires, nodes, caption, n, total) {
+  settle();
+  wires.forEach(([a, b]) => { wireState[`${a}>${b}`] = "flow"; });
+  nodes.forEach(([id, html]) => {
+    const el = flowNode(id);
+    el.classList.remove("done"); el.classList.add("live");
+    if (html != null) el.querySelector(".fn-out").innerHTML = html;
+  });
+  $("howCaption").innerHTML = caption;
+  $("howStep").textContent = `Step ${n} of ${total}`;
+  layoutWires();
+}
+
+/* What each block of the pipeline means, in words, with its real output. */
+function describe(t, r, s) {
+  const ms = `<span class="ms">${t.ms.toFixed(1)} ms</span>`;
+  const c = r.climate;
+  const dims = (t.output.match(/\d+/) || [""])[0];
+  switch (t.block) {
+    case "Input": return [[], [["weather", `${c.temperature_C} °C · ${c.humidity_pct}% humidity · ${c.rainfall_mm} mm rain`]],
+      `<b>Weather lookup.</b> The system fetches the weather actually recorded at ${esc(r.site.name)} on
+       ${fmtDate(r.date)}: ${c.temperature_C} °C, ${c.humidity_pct}% humidity, ${c.rainfall_mm} mm of rain. ${ms}`];
+    case "Vision": return [[["leaf", "vision"]], [["vision", `Leaf summarised as ${dims} numbers`]],
+      `<b>Vision transformer.</b> A transformer pre-trained on millions of images reads the photo and
+       describes the leaf as ${dims} numbers - its spots, colours and textures. ${ms}`];
+    case "Climate": return [[["weather", "climate"]], [["climate", `${c.leaf_wetness_h} h leaf wetness · VPD ${c.vpd_kPa} kPa`]],
+      `<b>Disease weather.</b> Raw weather becomes what plant pathologists use: hours the leaf stays wet
+       (${c.leaf_wetness_h} h), how fast the air dries it (${c.vpd_kPa} kPa), and heat build-up. ${ms}`];
+    case "Fusion": return [[["vision", "fusion"], ["climate", "fusion"]], [["fusion", `One ${dims}-number summary of this farm`]],
+      `<b>Fusion.</b> Leaf, weather and farm details become one summary. The weather decides which leaf
+       features matter - the same spots mean more in wet weather than in dry. ${ms}`];
+    case "Graph": {
+      const edges = Number((t.output.match(/(\d+) edges?/) || [0, 0])[1]);
+      return [[["farms", "graph"], ["graph", "gnn"], ["fusion", "gnn"]],
+        [["graph", edges ? `${edges} links to neighbouring farms` : "No neighbour reports in this run"],
+         ["gnn", "Farm summary refined"]],
+        `<b>Graph neural network.</b> Each farm is combined with its linked neighbours, along wind-aware
+         links up to 300 km. ${edges ? `This run had ${edges} links.` : `This test sends a single photo, so
+         there are no neighbour reports and the farm stands alone - in <b>District Alerts</b>, neighbours
+         drive the spread.`} ${ms}`];
+    }
+    case "Diagnosis": {
+      const right = r.disease === s.true_class;
+      if (r.disease.endsWith("___healthy")) {
+        return [[["gnn", "diagnosis"]], [["diagnosis", `<b>Healthy</b> · ${(r.confidence * 100).toFixed(1)}% sure`]],
+          `<b>Diagnosis.</b> Checked against 38 crop diseases, the leaf is <b>healthy</b>,
+           ${(r.confidence * 100).toFixed(1)}% confident. ${right ? "Correct: an expert labelled it healthy too." :
+           `An expert labelled it ${esc(pretty(s.true_class))}.`} ${ms}`];
+      }
+      return [[["gnn", "diagnosis"]], [["diagnosis", `<b>${esc(r.disease_label)}</b> · ${(r.confidence * 100).toFixed(1)}% sure`]],
+        `<b>Diagnosis.</b> Out of 38 crop diseases, the most likely is <b>${esc(r.disease_label)}</b>,
+         ${(r.confidence * 100).toFixed(1)}% confident. ${right ? "Correct: an expert labelled this leaf the same way." :
+         `An expert labelled it ${esc(pretty(s.true_class))}.`} ${ms}`];
+    }
+    case "Consistency": return [[], [["fusion", "Re-checked with the right crop"]],
+      `<b>Self-check.</b> ${esc(t.output)} - the farm details are corrected and the pass is repeated. ${ms}`];
+    case "Forecast": return [[["gnn", "forecast"]],
+      [["forecast", r.horizons.map((h, i) => `+${h}d ${pct(r.risk[i])}`).join(" · ")]],
+      `<b>7-day forecast.</b> The chance the disease spreads at this farm: ${r.horizons.map((h, i) =>
+        `${pct(r.risk[i])} in ${days(h)}`).join(", ")} - ${esc(r.risk_band.every((b) => b === "Low") ? "low throughout" :
+        `peaking at ${r.risk_band.reduce((a, b) => (RISK_ORDER[b] > RISK_ORDER[a] ? b : a))}`)}. ${ms}`];
+    case "Advisory": return [[["diagnosis", "advice"], ["forecast", "advice"]],
+      [["advice", esc((r.farmer_actions && r.farmer_actions[0]) || r.advisory)]],
+      `<b>What to do.</b> ${esc(r.advisory)} ${ms}`];
+    default: return [[], [], `<b>${esc(t.name)}.</b> ${esc(t.output)} ${ms}`];
+  }
+}
+
+$("howPlay").addEventListener("click", playHow);
+
+async function playHow() {
+  if (howBusy) return;
+  if (!samples.length) { $("howCaption").textContent = "Test leaves are unavailable - is the backend running?"; return; }
+  howBusy = true;
+  const btn = $("howPlay");
+  btn.disabled = true; btn.textContent = "Playing…";
+  resetFlow();
+  howIdx = (howIdx + 1) % samples.length;
+  const s = samples[howIdx];
+  try {
+    const blob = await (await fetch(api(`/api/samples/${encodeURIComponent(s.file)}`))).blob();
+    const fd = new FormData();
+    fd.append("image", new File([blob], s.file, { type: blob.type || "image/jpeg" }));
+    fd.append("site_id", s.site_id);
+    fd.append("date", s.date);
+    const res = await fetch(api("/api/predict/stream"), { method: "POST", body: fd });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "The pipeline did not run");
+    const msgs = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
+    const err = msgs.find((m) => m.type === "error");
+    if (err) throw new Error(err.detail);
+    const steps = msgs.filter((m) => m.type === "step").map((m) => m.step);
+    const r = msgs.find((m) => m.type === "result").result;
+    const total = steps.length + 2;
+
+    $("howThumb").src = URL.createObjectURL(blob);
+    $("howThumb").classList.add("show");
+    stage([], [["leaf", `${esc(pretty(s.crop))} leaf · test photo ${howIdx + 1} of ${samples.length}`],
+               ["farms", `${esc(s.farm)} and the farms around it`]],
+      `<b>The inputs.</b> A photo of a ${esc(pretty(s.crop).toLowerCase())} leaf from ${esc(s.farm)}, taken on
+       ${fmtDate(s.date)}, and the network of farms around it. The model never saw this photo while learning.`, 1, total);
+    await pause(HOW_DWELL_MS);
+
+    for (const [k, t] of steps.entries()) {
+      const [wires, nodes, caption] = describe(t, r, s);
+      stage(wires, nodes, caption, k + 2, total);
+      await pause(HOW_DWELL_MS);
+    }
+    settle();
+    const totalMs = steps.reduce((a, t) => a + t.ms, 0);
+    $("howCaption").innerHTML = `<b>Done in ${totalMs.toFixed(0)} ms.</b> One photo became a diagnosis
+      (${esc(r.disease_label)}), a 7-day risk forecast and advice for the farmer and officials.
+      Press <b>Next leaf</b> to run another.`;
+    $("howStep").textContent = `Step ${total} of ${total}`;
+    layoutWires();
+  } catch (e) {
+    $("howCaption").innerHTML = `<span class="err">${esc(e.message)}</span>`;
+  } finally {
+    howBusy = false;
+    btn.disabled = false; btn.innerHTML = "&#9654; Next leaf";
+  }
 }
 
 /* Reload with ?api= so the URL on screen is the link to share. */

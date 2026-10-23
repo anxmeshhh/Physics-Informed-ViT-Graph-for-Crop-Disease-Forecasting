@@ -28,6 +28,7 @@ import time
 import urllib.parse
 import urllib.request
 from datetime import date as Date
+from datetime import timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -130,6 +131,27 @@ def warm_up() -> None:
     print(f"  model ready in {time.perf_counter() - t0:.1f} s")
 
 
+# The dates the demo opens on: the default bulletin and the "Try an example" case.
+DEMO_DATES = [Date(2023, 5, 30), Date(2023, 6, 22)]
+
+
+def prefetch_heatmaps() -> None:
+    """Fetch the heatmap's grid weather for the demo dates, in the background.
+
+    Each date is a few hundred archive lookups the first time and a disk read
+    after that, so the heatmap appears instantly when the panel is watching.
+    """
+    from cropforecast.serve import heatmap
+
+    for d in DEMO_DATES:
+        try:
+            heatmap.grid_weather(d, d + timedelta(days=heatmap.DAYS - 1))
+        except Exception as exc:                           # noqa: BLE001
+            print(f"  heatmap prefetch for {d} skipped: {exc}")
+            return
+    print("  heatmap weather cached for the demo dates")
+
+
 def open_tunnel(port: int) -> tuple[subprocess.Popen, str]:
     exe = shutil.which("cloudflared") or next(
         (p for p in CLOUDFLARED_DEFAULTS if Path(p).exists()), None)
@@ -185,6 +207,7 @@ def main() -> None:
 
     print("Warming up the model ...")
     warm_up()
+    threading.Thread(target=prefetch_heatmaps, daemon=True).start()
 
     tunnel = None
     public = ""

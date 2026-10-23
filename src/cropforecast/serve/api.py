@@ -26,7 +26,7 @@ from PIL import Image
 
 from ..config import PROJECT_ROOT, load_config
 from ..data.farms import to_frame
-from . import bulletin, demos, literature, nearby
+from . import bulletin, demos, heatmap, literature, nearby
 from .inference import ForecastService
 
 WEB_DIR = Path(__file__).parent / "web"
@@ -42,6 +42,7 @@ app.add_middleware(
 )
 
 _cfg = load_config()
+API_LEVEL = 4      # bump when the page starts calling a new endpoint
 _service: ForecastService | None = None
 
 
@@ -77,7 +78,9 @@ def index():
 @app.get("/api/health")
 def health():
     ready = (Path(_cfg.paths.checkpoints) / "final_model.pt").exists()
-    return {"status": "ok", "model_trained": ready}
+    # The page checks api_level, so a server left running from before a feature
+    # was added says "restart me" instead of answering that feature with a 404.
+    return {"status": "ok", "model_trained": ready, "api_level": API_LEVEL}
 
 
 @app.get("/api/sites")
@@ -671,6 +674,20 @@ def near_location(lat: float, lon: float, crop: str, date: str, radius_km: float
             status_code=503,
             detail=f"Dataset not built yet - run scripts/01_build_dataset.py ({exc})",
         ) from exc
+
+
+@app.get("/api/heatmap")
+def risk_surface(crop: str, date: str):
+    """Risk on a 1 degree grid across the monitored region, for the map."""
+    try:
+        when = Date.fromisoformat(date)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD") from exc
+    light = demos.ClimateOnlyService(_cfg)
+    try:
+        return heatmap.build(light.climate, light.outbreaks, crop, when)
+    except heatmap.WeatherUnavailable as exc:
+        raise HTTPException(status_code=503, detail=f"Heatmap unavailable: {exc}") from exc
 
 
 @app.get("/api/geocode")

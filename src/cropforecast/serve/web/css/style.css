@@ -548,6 +548,20 @@ select:focus, input:focus { outline: none; border-color: var(--brand); }
 .acard-more { font-size: 12px; color: var(--brand); font-weight: 600; margin-top: 8px; }
 .acard.open .acard-more { display: none; }
 
+/* ---------------- heatmap ---------------- */
+.map-tools select { width: auto; padding: 6px 9px; font-size: 13px; }
+.map-tools label { margin: 0; }
+.heat-legend { margin: 0 0 10px; font-size: 12px; color: var(--ink-soft); }
+.heat-legend[hidden] { display: none; }
+.hl-bar { height: 10px; border-radius: 999px; border: 1px solid var(--rule);
+  background: linear-gradient(90deg, #16a34a 0%, #eab308 25%, #f97316 55%, #dc2626 80%, #991b1b 100%); }
+.hl-ticks { position: relative; height: 16px; margin-top: 3px; }
+.hl-ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; font-size: 11px; color: var(--ink-faint); }
+.hl-ticks span:first-child { transform: none; }
+.hl-ticks span:last-child { transform: translateX(-100%); }
+.hl-read { margin-top: 2px; min-height: 18px; font-weight: 600; color: var(--ink); }
+.heat-pane { pointer-events: none; }
+
 /* ---------------- country / near-a-location ---------------- */
 .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 9px; overflow: hidden; background: var(--paper); }
 .seg-btn { font-family: inherit; font-size: 13px; font-weight: 650; padding: 9px 14px; border: none; background: transparent; color: var(--ink-soft); cursor: pointer; }
@@ -612,4 +626,59 @@ details.tech[open] summary { margin-bottom: 8px; }
   .acard-more { display: none; }
   #leaflet { height: 420px; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
+/* ---------------- how it works: animated input-to-output flow ---------------- */
+.how-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 16px; }
+.how-step { font-size: 13px; color: var(--ink-faint); font-weight: 600; font-variant-numeric: tabular-nums; }
+.flow {
+  position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 22px clamp(22px, 3vw, 54px); padding: 22px; border: 1px solid var(--rule);
+  border-radius: var(--radius); background: linear-gradient(180deg, #fbfdfb, var(--paper));
+}
+.flow-col { display: flex; flex-direction: column; justify-content: center; gap: 16px; position: relative; z-index: 1; }
+.fcol-head { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; text-align: center; }
+.flow-wires { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: visible; }
+.fnode {
+  border: 1.5px solid var(--rule); border-radius: 12px; background: var(--paper);
+  padding: 11px 13px; box-shadow: var(--shadow); transition: border-color .3s, box-shadow .3s, transform .3s, background .3s;
+}
+.fn-top { display: flex; align-items: center; gap: 8px; }
+.fn-ico { font-size: 18px; line-height: 1; }
+.fn-title { font-weight: 700; font-size: 13.5px; }
+.fn-out { margin-top: 5px; font-size: 12.5px; color: var(--ink-faint); line-height: 1.4; overflow-wrap: anywhere; }
+.fn-thumb { display: none; width: 100%; max-height: 120px; object-fit: cover; border-radius: 8px; margin-top: 8px; }
+.fn-thumb.show { display: block; }
+.fnode.live {
+  border-color: var(--saffron); background: var(--saffron-soft); transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 0 0 4px rgba(249, 115, 22, .18), var(--shadow);
+}
+.fnode.live .fn-out { color: var(--ink); }
+.fnode.done { border-color: #86cfa0; background: var(--brand-soft); }
+.fnode.done .fn-out { color: var(--ink-soft); font-weight: 600; }
+.fnode.out.done { border-color: var(--brand); }
+.fnode.out.done .fn-out { color: var(--ink); font-size: 13.5px; }
+
+.wire { fill: none; stroke: var(--rule); stroke-width: 2; transition: stroke .3s; }
+.wire.flow { stroke: var(--saffron); stroke-width: 3; stroke-dasharray: 7 9; animation: wire-run .6s linear infinite; }
+.wire.done { stroke: #6cc08b; stroke-width: 2.5; }
+@keyframes wire-run { to { stroke-dashoffset: -32; } }
+.packet { fill: var(--saffron); }
+
+.how-caption {
+  margin-top: 16px; padding: 14px 18px; border-radius: var(--radius); min-height: 54px;
+  background: var(--cream); border: 1px solid var(--rule); font-size: 15px; line-height: 1.5;
+}
+.how-caption b { color: var(--brand-dark); }
+.how-caption .ms { font-family: var(--mono); font-size: 12.5px; color: var(--ink-faint); }
+
+/* Five columns need room; below that the blocks stack and their order carries the flow. */
+@media (max-width: 1180px) {
+  .flow { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .flow-col { gap: 10px; }
+  .fcol-head { text-align: left; margin-top: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wire.flow { animation: none; }
+  .fnode.live { transform: none; }
 }

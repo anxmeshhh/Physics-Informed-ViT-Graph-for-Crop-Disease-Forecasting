@@ -135,21 +135,39 @@ def warm_up() -> None:
 DEMO_DATES = [Date(2023, 5, 30), Date(2023, 6, 22)]
 
 
+def demo_dates() -> list[Date]:
+    """The fixed demo dates plus every date in the test-leaf table, since a run
+    moves the map to its leaf's date."""
+    dates = set(DEMO_DATES)
+    index = PROJECT_ROOT / "tests" / "index.csv"
+    if index.exists():
+        dates |= {Date.fromisoformat(d) for d in pd.read_csv(index).suggested_date.unique()}
+    return sorted(dates)
+
+
 def prefetch_heatmaps() -> None:
     """Fetch the heatmap's grid weather for the demo dates, in the background.
 
-    Each date is a few hundred archive lookups the first time and a disk read
-    after that, so the heatmap appears instantly when the panel is watching.
+    Each new date is 341 archive lookups the first time and a disk read after
+    that, so the heatmap appears instantly when the panel is watching. Fetches
+    are spaced out because the free archive allows ~600 lookups a minute.
     """
     from cropforecast.serve import heatmap
 
-    for d in DEMO_DATES:
+    fetched = 0
+    for d in demo_dates():
+        end = d + timedelta(days=heatmap.DAYS - 1)
+        if (heatmap.CACHE_DIR / f"{d}_{end}.parquet").exists():
+            continue
+        if fetched:
+            time.sleep(45)
         try:
-            heatmap.grid_weather(d, d + timedelta(days=heatmap.DAYS - 1))
+            heatmap.grid_weather(d, end)
+            fetched += 1
         except Exception as exc:                           # noqa: BLE001
             print(f"  heatmap prefetch for {d} skipped: {exc}")
             return
-    print("  heatmap weather cached for the demo dates")
+    print(f"  heatmap weather cached for {len(demo_dates())} demo dates")
 
 
 def open_tunnel(port: int) -> tuple[subprocess.Popen, str]:

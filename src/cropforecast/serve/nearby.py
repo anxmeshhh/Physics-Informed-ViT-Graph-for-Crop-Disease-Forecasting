@@ -73,6 +73,44 @@ def geocode(query: str) -> list[dict]:
     } for h in hits]
 
 
+def arriving(climate: pd.DataFrame, outbreaks: pd.DataFrame | None, crop: str,
+             days: pd.DatetimeIndex, lat: float, lon: float,
+             exclude: str | None = None) -> dict:
+    """Disease carried to (lat, lon) from every district growing ``crop``.
+
+    The contagion model's kernel: spores leave a source travelling toward its
+    wind direction + 180 and reach here when that points along source -> here,
+    decaying with distance. ``exclude`` drops one district - a monitored farm's
+    own outbreak is "present", not "arriving".
+    """
+    sites = [s for s in SITES if crop in s.crops and s.site_id != exclude]
+    ids = [s.site_id for s in sites]
+    lats = np.array([s.lat for s in sites])
+    lons = np.array([s.lon for s in sites])
+    dist = haversine_km(lats, lons, lat, lon)
+    to_here = initial_bearing_deg(lats, lons, lat, lon)
+
+    clim = climate[climate.site_id.isin(ids) & climate.date.isin(days)]
+    piv = lambda col: (clim.pivot(index="date", columns="site_id", values=col)
+                       .reindex(index=days, columns=ids).fillna(0.0).to_numpy())
+    wind_dir, wind_spd = piv("wind_direction_10m_dominant"), piv("wind_speed_10m_max")
+    if outbreaks is not None:
+        ob = outbreaks[(outbreaks.crop == crop) & outbreaks.site_id.isin(ids)
+                       & outbreaks.date.isin(days)]
+        infected = (ob.pivot(index="date", columns="site_id", values="infection_pressure")
+                    .reindex(index=days, columns=ids).fillna(0.0).to_numpy())
+    else:
+        infected = np.zeros((len(days), len(ids)))
+
+    base = np.exp(-dist / PARAMS.length_scale_km)
+    align = np.cos(np.radians((wind_dir + 180.0) % 360.0 - to_here[None, :]))
+    speed = np.clip(wind_spd / 30.0, 0.0, 1.5)
+    kernel = base[None, :] * (1.0 + PARAMS.wind_boost * np.clip(align, 0.0, None) * speed)
+    contrib = PARAMS.gamma * kernel * infected                # (days, sites)
+    return {"sites": sites, "dist": dist, "align": align, "wind_spd": wind_spd,
+            "infected": infected, "contrib": contrib, "imported": contrib.sum(axis=1)}
+
+
 def assess_location(cfg, climate: pd.DataFrame, outbreaks: pd.DataFrame | None,
                     crop: str, when: Date, lat: float, lon: float,
                     radius_km: float = 300.0) -> dict:
@@ -87,7 +125,6 @@ def assess_location(cfg, climate: pd.DataFrame, outbreaks: pd.DataFrame | None,
     lats = np.array([s.lat for s in sites])
     lons = np.array([s.lon for s in sites])
     dist = haversine_km(lats, lons, lat, lon)                 # source -> here
-    to_here = initial_bearing_deg(lats, lons, lat, lon)       # bearing source -> here
     from_here = initial_bearing_deg(lat, lon, lats, lons)     # for "65 km NE"
     nearest = int(np.argmin(dist))
 
@@ -109,29 +146,9 @@ def assess_location(cfg, climate: pd.DataFrame, outbreaks: pd.DataFrame | None,
     local = crop_pressure(crop, weather)
 
     # --- inoculum arriving ---------------------------------------------------
-    ids = [s.site_id for s in sites]
-    clim = climate[climate.site_id.isin(ids) & climate.date.isin(days)]
-    wind_dir = clim.pivot(index="date", columns="site_id",
-                          values="wind_direction_10m_dominant").reindex(index=days, columns=ids)
-    wind_spd = clim.pivot(index="date", columns="site_id",
-                          values="wind_speed_10m_max").reindex(index=days, columns=ids)
-    if outbreaks is not None:
-        ob = outbreaks[(outbreaks.crop == crop) & outbreaks.site_id.isin(ids)
-                       & outbreaks.date.isin(days)]
-        infected = ob.pivot(index="date", columns="site_id",
-                            values="infection_pressure").reindex(index=days, columns=ids)
-    else:
-        infected = pd.DataFrame(0.0, index=days, columns=ids)
-    wind_dir, wind_spd, infected = (x.fillna(0.0).to_numpy() for x in (wind_dir, wind_spd, infected))
-
-    # Same kernel as the simulation: spores leave the source travelling toward
-    # wind_dir + 180, and arrive here when that points along source -> here.
-    base = np.exp(-dist / PARAMS.length_scale_km)
-    align = np.cos(np.radians((wind_dir + 180.0) % 360.0 - to_here[None, :]))
-    speed = np.clip(wind_spd / 30.0, 0.0, 1.5)
-    kernel = base[None, :] * (1.0 + PARAMS.wind_boost * np.clip(align, 0.0, None) * speed)
-    contrib = PARAMS.gamma * kernel * infected                # (days, sites)
-    imported = contrib.sum(axis=1)
+    arr = arriving(climate, outbreaks, crop, days, lat, lon)
+    align, wind_spd, infected = arr["align"], arr["wind_spd"], arr["infected"]
+    contrib, imported = arr["contrib"], arr["imported"]
 
     risk = combined_risk(local, imported)
     peers = [c for c in PROFILES if c.split("___", 1)[0] == crop]

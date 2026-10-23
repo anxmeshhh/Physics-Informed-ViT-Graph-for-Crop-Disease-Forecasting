@@ -359,7 +359,13 @@ async function syncMapToRun(d) {
     const crop = $("mapCrop");
     if (d.crop && [...crop.options].some((o) => o.value === d.crop)) crop.value = d.crop;
     if (d.date) $("mapDate").value = d.date;
+    if (viewMode !== "country") setMode("country");
     await updateMap();
+    // Open this run's own farm, so the leaf and its district read as one story.
+    if (d.site && districtMarkers[d.site.site_id]) {
+      focusCard(d.site.site_id);
+      districtMarkers[d.site.site_id].openPopup();
+    }
   } catch (err) {
     // initMap() runs outside updateMap's own guard, so a CDN-less Leaflet
     // would otherwise reject here unseen.
@@ -385,6 +391,7 @@ function showResult(d) {
     ? items(d.farmer_actions)
     : "<li>No disease found on this leaf &mdash; continue routine scouting</li>";
   $("officerActions").innerHTML = items(d.officer_actions || []);
+  renderWhy(d);
 
   $("horizonTable").innerHTML =
     `<thead><tr><th>Horizon</th><th>Risk</th><th>Band</th><th>± σ</th></tr></thead><tbody>` +
@@ -1151,6 +1158,80 @@ function readHeat(e) {
       `${pct(v)} (${when}) · ${ALERT_WORD[v > 0.55 ? "High" : v > 0.25 ? "Medium" : "Low"]}`;
 }
 
+/* ------------------------------------------------------- why this result */
+/* The chain from this leaf to this forecast: what the disease needs, what the
+   weather at this farm actually was, whether the disease is here or arriving,
+   and why the district map can say "act now" while this farm's forecast is
+   lower. Every link is a number the server computed. */
+// Graded from the farmer's side: weather that suits the disease is the warning.
+const GRADE_TEXT = { favourable: "⚠ suits the disease", "partly favourable": "≈ partly suits it",
+                     unfavourable: "✓ does not suit it" };
+
+function whyRow(icon, label, value, grade) {
+  const pill = grade ? `<span class="why-grade g-${grade.split(" ")[0]}">${GRADE_TEXT[grade]}</span>` : "";
+  return `<li><span class="why-ico">${icon}</span><div><div class="why-label">${esc(label)}</div>
+    <div class="why-val">${value}</div></div>${pill}</li>`;
+}
+
+function renderWhy(d) {
+  const c = d.context || {};
+  const td = c.this_disease;
+  const farm = `${esc(d.site.name)}, ${fmtDate(d.date)}`;
+  const worst = d.risk_band.reduce((a, b) => (RISK_ORDER[b] > RISK_ORDER[a] ? b : a), "Low");
+  const rows = [whyRow("🍃", "This leaf", `<b>${esc(d.disease_label)}</b> · ${(d.confidence * 100).toFixed(1)}% sure`)];
+
+  if (td) {
+    rows.push(whyRow("🧫", `What ${td.name.toLowerCase()} needs`,
+      `${esc(td.needs.temperature)} · ${esc(td.needs.moisture)}`));
+    rows.push(whyRow("🌡", `Temperature at ${farm}`,
+      `${esc(td.observed.temperature)} - ${esc(td.temperature_note)}`, td.temperature_grade));
+    rows.push(whyRow("💧", "Moisture that day", esc(td.observed.moisture), td.moisture_grade));
+    rows.push(whyRow("⚖", `How much this weather suits ${td.name.toLowerCase()}`,
+      `${pct(td.today)} today${td.peak_day ? `, rising to ${pct(td.peak)} in ${days(td.peak_day)}` : ""}`,
+      td.peak >= 0.55 ? "favourable" : td.peak >= 0.25 ? "partly favourable" : "unfavourable"));
+  } else {
+    rows.push(whyRow("🌦", `Weather threat for ${esc((c.crop_label || pretty(d.crop)).toLowerCase())} at ${farm}`,
+      c.district ? `${ALERT_WORD[c.district.alert]}${c.district.threat ? ` - main threat ${esc(c.district.threat)}` : ""}` : "-"));
+  }
+  const from = c.arriving_from && c.disease_arriving > 0.01
+    ? ` (mostly from ${esc(c.arriving_from.name)}, ${Math.round(c.arriving_from.distance_km)} km)` : "";
+  rows.push(whyRow("🦠", "Is the disease spreading here?",
+    `Present at this farm: <b>${pct(c.disease_present || 0)}</b> · arriving from neighbours: <b>${pct(c.disease_arriving || 0)}</b>${from}`));
+  rows.push(whyRow("📈", "So the 7-day spread forecast is",
+    `<b>${worst}</b> - ${d.horizons.map((h, i) => `${pct(d.risk[i])} in ${days(h)}`).join(", ")}`));
+  $("whyChain").innerHTML = rows.join("");
+
+  // Reconcile with the district map, which the run has just moved to.
+  // How much disease is about: none, a trace, or an active outbreak. The
+  // presence scale saturates quickly, so a trace must not read like an outbreak.
+  const spread = Math.max(c.disease_present || 0, c.disease_arriving || 0);
+  const level = spread < 0.05 ? "none" : spread < 0.3 ? "little" : "much";
+  const dist = c.district;
+  const crop = esc((c.crop_label || pretty(d.crop)).toLowerCase());
+  let note = "";
+  if (dist) {
+    const mapSays = `The district map marks ${esc(d.site.name)} <b>${ALERT_WORD[dist.alert]}</b>` +
+      (dist.alert === "Low" ? ` - this week's weather does not favour ${crop} diseases.`
+        : ` because this week's weather favours ${crop} diseases${dist.threat ? ` (leading: ${esc(dist.threat)})` : ""}.`);
+    const where = (c.disease_present || 0) >= 0.3 && (c.disease_arriving || 0) >= 0.3
+      ? "present at this farm and arriving from its neighbours"
+      : (c.disease_present || 0) >= (c.disease_arriving || 0) ? "already present at this farm" : "arriving from neighbouring farms";
+    if (RISK_ORDER[worst] < RISK_ORDER[dist.alert]) {
+      note = level === "much"
+        ? `${mapSays} The disease is ${where}, but the model expects ${worst === "Low" ? "little" : "moderate"}
+           spread here this week, so this farm is <b>${worst}</b> - keep it under watch.`
+        : `${mapSays} This farm's forecast is lower because ${level === "none" ? "no disease is"
+           : "only a little disease is"} present here or arriving from neighbours - spread needs
+           <b>both</b> favourable weather and the disease nearby.`;
+    } else {
+      note = level === "much"
+        ? `${mapSays} The disease is ${where}, so this farm's forecast is <b>${worst}</b>.`
+        : `${mapSays} This week's weather alone is enough to put this farm's forecast at <b>${worst}</b>.`;
+    }
+  }
+  $("whyNote").innerHTML = note;
+}
+
 /* ------------------------------------------------------------ how it works */
 /* One held-out test leaf, sent through the live pipeline, with each block of
    the diagram lighting up in turn and showing what it really produced. The
@@ -1161,13 +1242,52 @@ const FLOW_WIRES = [
   ["vision", "fusion"], ["climate", "fusion"], ["fusion", "gnn"], ["graph", "gnn"],
   ["gnn", "diagnosis"], ["gnn", "forecast"], ["diagnosis", "advice"], ["forecast", "advice"],
 ];
-const HOW_DWELL_MS = 1500;
+const HOW_DWELL_MS = 2600;        // long enough to read a caption aloud
 const wireState = {};
 let howIdx = -1, howBusy = false;
 const flowNode = (id) => document.querySelector(`.fnode[data-node="${id}"]`);
 const pause = (ms) => new Promise((r) => setTimeout(r, ms));
 
 document.querySelectorAll(".fnode .fn-out").forEach((el) => { el.dataset.idle = el.innerHTML; });
+document.querySelectorAll(".fnode .fn-top").forEach((el) => el.insertAdjacentHTML("afterend", '<div class="fn-tech"></div>'));
+
+const millions = (n) => `${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M`;
+/* Short technical labels per block, from what the server measured. */
+function fillTech(e) {
+  const tech = {
+    leaf: "JPEG → 224×224 RGB",
+    weather: "Open-Meteo ERA5 archive",
+    farms: `${e.graph_k} nearest · ≤${e.graph_radius_km} km · wind-aware`,
+    vision: `DINOv2 ViT-S/14 · ${millions(e.backbone_params)} params · frozen`,
+    climate: `${e.climate_dim} weather + ${e.meta_dim} farm features`,
+    graph: `KNN + radius graph`,
+    fusion: `FiLM gating → ${e.fusion_dim}-d`,
+    gnn: `GraphSAGE · ${e.gnn_layers} layers · ${e.gnn_hidden}-d`,
+    diagnosis: `MLP + softmax · ${e.classes} classes`,
+    forecast: `GRU decoder · ${e.horizons.length} horizons`,
+    advice: "Rules on pathogen knowledge base",
+  };
+  Object.entries(tech).forEach(([id, txt]) => { flowNode(id).querySelector(".fn-tech").textContent = txt; });
+  $("engineStrip").innerHTML = `<span><b>Engine</b> ${esc(e.framework)} on ${esc(e.device)}</span>
+    <span><b>Server</b> ${esc(e.server)}</span>
+    <span><b>Model size</b> ${millions(e.backbone_params)} frozen + ${millions(e.model_params)} trained parameters</span>`;
+}
+
+/* One line of "what ran here" under each caption. */
+function techLine(t, e) {
+  const line = {
+    Input: `Data: Open-Meteo ERA5 reanalysis · ${t.output}`,
+    Vision: `Model: ${e.backbone} (ViT-S/14, ${millions(e.backbone_params)} parameters, frozen) · 224×224 in → ${e.vision_dim} numbers out`,
+    Climate: `Engine: pandas + NumPy · VPD, leaf wetness, GDD, 3/7/14-day windows · ${e.climate_dim} + ${e.meta_dim} features, standardised`,
+    Fusion: `Model: FiLM (feature-wise linear modulation) · 3 streams → ${e.fusion_dim} numbers`,
+    Graph: `Model: GraphSAGE, ${e.gnn_layers} layers, ${e.gnn_hidden}-d · graph: ${e.graph_k} nearest within ${e.graph_radius_km} km`,
+    Diagnosis: `Model: 2-layer MLP + softmax over ${e.classes} classes`,
+    Consistency: "Engine: re-run with corrected crop metadata",
+    Forecast: `Model: GRU-cell decoder · +${e.horizons.join(", +")} days · risk, band and uncertainty`,
+    Advisory: "Engine: rule-based advisor on the pathogen knowledge base",
+  }[t.block];
+  return line ? `<div class="how-tech">${esc(line)} · ${t.ms.toFixed(1)} ms on ${esc(e.device.split(" (")[0])}</div>` : "";
+}
 
 function layoutWires() {
   const flow = $("flow"), svg = $("flowWires");
@@ -1309,17 +1429,19 @@ async function playHow() {
     const r = msgs.find((m) => m.type === "result").result;
     const total = steps.length + 2;
 
+    if (r.engine) fillTech(r.engine);
     $("howThumb").src = URL.createObjectURL(blob);
     $("howThumb").classList.add("show");
     stage([], [["leaf", `${esc(pretty(s.crop))} leaf · test photo ${howIdx + 1} of ${samples.length}`],
                ["farms", `${esc(s.farm)} and the farms around it`]],
       `<b>The inputs.</b> A photo of a ${esc(pretty(s.crop).toLowerCase())} leaf from ${esc(s.farm)}, taken on
-       ${fmtDate(s.date)}, and the network of farms around it. The model never saw this photo while learning.`, 1, total);
+       ${fmtDate(s.date)}, and the network of farms around it. The model never saw this photo while learning.
+       <div class="how-tech">Inputs: one RGB photo · farm ID + date · registry of 37 districts</div>`, 1, total);
     await pause(HOW_DWELL_MS);
 
     for (const [k, t] of steps.entries()) {
       const [wires, nodes, caption] = describe(t, r, s);
-      stage(wires, nodes, caption, k + 2, total);
+      stage(wires, nodes, caption + (r.engine ? techLine(t, r.engine) : ""), k + 2, total);
       await pause(HOW_DWELL_MS);
     }
     settle();

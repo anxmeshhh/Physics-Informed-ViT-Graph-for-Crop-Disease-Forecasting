@@ -682,3 +682,29 @@ details.tech[open] summary { margin-bottom: 8px; }
   .wire.flow { animation: none; }
   .fnode.live { transform: none; }
 }
+
+/* ---------------- why this result ---------------- */
+.why { margin-top: 14px; border: 1px solid var(--rule); border-radius: var(--radius); padding: 14px 16px; background: var(--paper); }
+.why-head { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 700; margin-bottom: 8px; }
+.why-chain { list-style: none; margin: 0; padding: 0; }
+.why-chain li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  padding: 8px 0 8px 2px; position: relative; }
+.why-chain li + li { border-top: 1px dashed var(--rule-soft); }
+.why-ico { font-size: 17px; text-align: center; }
+.why-label { font-size: 12px; color: var(--ink-faint); font-weight: 600; }
+.why-val { font-size: 13.5px; color: var(--ink); }
+.why-grade { font-size: 11.5px; font-weight: 700; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.g-favourable { background: #fdecec; color: #b91c1c; }
+.g-partly { background: #fdf3e2; color: #b45309; }
+.g-unfavourable { background: #e9f7ee; color: #15803d; }
+.why-note { margin: 10px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--saffron-soft); font-size: 13px; color: var(--ink-soft); }
+.why-note:empty { display: none; }
+
+/* ---------------- how it works: tech labels ---------------- */
+.engine-strip { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: -4px 0 14px; font-size: 12.5px; color: var(--ink-soft); }
+.engine-strip span { background: var(--cream); border: 1px solid var(--rule); border-radius: 999px; padding: 4px 12px; }
+.engine-strip b { color: var(--brand-dark); margin-right: 4px; }
+.fn-tech { margin-top: 4px; font-family: var(--mono); font-size: 10.5px; color: var(--brand-dark); background: var(--brand-soft);
+  border-radius: 6px; padding: 2px 6px; display: inline-block; }
+.fn-tech:empty { display: none; }
+.how-tech { margin-top: 6px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }

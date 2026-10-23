@@ -227,6 +227,12 @@
           <div class="diag-where" id="diagWhere"></div>
         </div>
 
+        <div class="why" id="whyBox">
+          <div class="why-head">Why this result &mdash; this leaf, this weather, this farm</div>
+          <ol class="why-chain" id="whyChain"></ol>
+          <p class="why-note" id="whyNote"></p>
+        </div>
+
         <div class="act-pair">
           <div class="act-box farmer"><h4>What the farmer should do</h4><ul id="farmerActions"></ul></div>
           <div class="act-box officer"><h4>What officials should do</h4><ul id="officerActions"></ul></div>
@@ -295,6 +301,11 @@
   <div class="how-bar">
     <button class="run cta" id="howPlay" type="button">&#9654; Play with a real leaf</button>
     <span class="how-step" id="howStep"></span>
+  </div>
+  <div class="engine-strip" id="engineStrip">
+    <span><b>Engine</b> PyTorch on the presenter's machine</span>
+    <span><b>Server</b> FastAPI</span>
+    <span><b>Data</b> PlantVillage leaves &middot; Open-Meteo ERA5 weather</span>
   </div>
 
   <div class="flow" id="flow">

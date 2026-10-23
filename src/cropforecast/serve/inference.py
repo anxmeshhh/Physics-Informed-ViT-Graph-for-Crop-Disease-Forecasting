@@ -30,7 +30,7 @@ from ..models.backbones import load_backbone
 from ..models.full_model import CropDiseaseForecastNet
 from ..physics.epidemiology import PROFILES, crop_pressure
 from ..physics.losses import PHYSICS_COLUMNS
-from . import bulletin
+from . import bulletin, context
 
 RISK_LABELS = ("Low", "Medium", "High")
 
@@ -53,6 +53,8 @@ class Prediction:
     trace: list[dict]
     organism: str = ""
     disease_label: str = ""
+    context: dict = field(default_factory=dict)
+    engine: dict = field(default_factory=dict)
     farmer_actions: list[str] = field(default_factory=list)
     officer_actions: list[str] = field(default_factory=list)
 
@@ -108,7 +110,40 @@ class ForecastService:
         self.site_lookup = site_index()
         self.horizons = list(self.meta["horizons"])
 
+        # Low / Medium / High cut-offs per horizon, as used to train the level head.
+        thr_path = processed / "risk_thresholds.json"
+        self.risk_thresholds = (json.loads(thr_path.read_text(encoding="utf-8"))
+                                if thr_path.exists() else {})
+
+        # The simulated epidemic, so a result can say whether the disease is
+        # present at the farm or arriving from its neighbours.
+        ob_path = processed / "outbreaks.parquet"
+        self.outbreaks = pd.read_parquet(ob_path) if ob_path.exists() else None
+        if self.outbreaks is not None:
+            self.outbreaks["date"] = pd.to_datetime(self.outbreaks["date"])
+
+        # What the run actually executes on, for the walkthrough's labels.
+        self.engine = {
+            "framework": f"PyTorch {torch.__version__.split('+')[0]}",
+            "device": (f"{torch.cuda.get_device_name(self.device)} (CUDA)"
+                       if self.device.type == "cuda" else "CPU"),
+            "backbone": SPECS[self.model_cfg["backbone"]].hf_id,
+            "backbone_params": sum(p.numel() for p in self.backbone.parameters()),
+            "model_params": sum(p.numel() for p in self.model.parameters()),
+            "vision_dim": self.meta["vision_dim"], "climate_dim": self.meta["climate_dim"],
+            "meta_dim": self.meta["meta_dim"], "fusion_dim": self.model_cfg["fusion_dim"],
+            "gnn": self.model_cfg["gnn_conv"], "gnn_layers": self.model_cfg["gnn_layers"],
+            "gnn_hidden": self.model_cfg["gnn_hidden"], "classes": self.meta["num_classes"],
+            "horizons": list(self.meta["horizons"]),
+            "graph_k": cfg.graph.k_neighbours, "graph_radius_km": cfg.graph.radius_km,
+            "server": "FastAPI + Uvicorn",
+        }
+
     # -- helpers ------------------------------------------------------------
+    def band_for(self, risk: float, horizon: int) -> str:
+        lo, hi = self.risk_thresholds.get(f"risk_t{horizon}", (0.25, 0.55))
+        return "High" if risk >= hi else "Medium" if risk >= lo else "Low"
+
     def available_dates(self, site_id: str) -> tuple[str, str]:
         sub = self.climate[self.climate.site_id == site_id]
         return str(sub.date.min().date()), str(sub.date.max().date())
@@ -264,8 +299,11 @@ class ForecastService:
 
         risk = out["risk"][0].tolist()
         levels = out["level_logits"][0].softmax(-1)
-        bands = [RISK_LABELS[int(l.argmax())] for l in levels]
-        band_conf = [float(l.max()) for l in levels]
+        # The band is read off the risk number, with the cut-offs the level
+        # head was trained on. Taking the level head's own argmax let the two
+        # disagree on screen ("High - 37%"); now they cannot.
+        bands = [self.band_for(r, h) for r, h in zip(risk, self.horizons)]
+        band_conf = [float(l[RISK_LABELS.index(b)]) for l, b in zip(levels, bands)]
         sigma = (out["logvar"][0] * 0.5).exp().tolist()
         yield step("Forecast", "Multi-horizon risk head",
              f"Risk, band and uncertainty at +{', +'.join(str(h) for h in self.horizons)} days",
@@ -305,6 +343,9 @@ class ForecastService:
             date=str(when),
             advisory=note,
             trace=trace,
+            context=context.case_context(self.climate, self.outbreaks, best_crop,
+                                         best, site, when),
+            engine=self.engine,
             disease_label=("Healthy leaf" if best.endswith("___healthy")
                            else bulletin.pretty(best)),
             organism=("Healthy" if best.endswith("___healthy")

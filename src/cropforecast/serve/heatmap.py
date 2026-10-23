@@ -14,6 +14,7 @@ cached to disk, so a demo pays for each date only the first time.
 """
 from __future__ import annotations
 
+import time
 from datetime import date as Date
 from datetime import timedelta
 from functools import lru_cache
@@ -76,21 +77,7 @@ def grid_weather(start: Date, end: Date) -> pd.DataFrame:
     frames = []
     for k in range(0, len(cells), BATCH):
         chunk = cells[k:k + BATCH]
-        try:
-            resp = requests.get(ARCHIVE_URL, timeout=40, params={
-                "latitude": ",".join(f"{c[2]:.2f}" for c in chunk),
-                "longitude": ",".join(f"{c[3]:.2f}" for c in chunk),
-                "start_date": str(start), "end_date": str(end),
-                "daily": ",".join(GRID_VARS), "timezone": "Asia/Kolkata",
-            })
-        except requests.RequestException as exc:
-            raise WeatherUnavailable(f"weather archive unreachable ({exc})") from exc
-        if resp.status_code == 429:
-            raise WeatherUnavailable("the weather archive is rate-limiting; try again in a minute")
-        if not resp.ok:
-            raise WeatherUnavailable(f"weather archive returned {resp.status_code}")
-        payload = resp.json()
-        payload = payload if isinstance(payload, list) else [payload]
+        payload = _fetch_batch(chunk, start, end)
         for (i, j, _, _), loc in zip(chunk, payload):
             df = pd.DataFrame(loc["daily"]).rename(columns={"time": "date"})
             df["i"], df["j"] = i, j
@@ -101,6 +88,32 @@ def grid_weather(start: Date, end: Date) -> pd.DataFrame:
     out = derive_daily_features(out)
     out.to_parquet(path, index=False)
     return out
+
+
+def _fetch_batch(chunk: list, start: Date, end: Date, attempts: int = 3) -> list:
+    """One batched archive request. A truncated or garbled reply is retried;
+    a rate limit is not, since retrying straight away only extends it."""
+    last = "no response"
+    for attempt in range(attempts):
+        try:
+            resp = requests.get(ARCHIVE_URL, timeout=40, params={
+                "latitude": ",".join(f"{c[2]:.2f}" for c in chunk),
+                "longitude": ",".join(f"{c[3]:.2f}" for c in chunk),
+                "start_date": str(start), "end_date": str(end),
+                "daily": ",".join(GRID_VARS), "timezone": "Asia/Kolkata",
+            })
+            if resp.status_code == 429:
+                raise WeatherUnavailable("the weather archive is rate-limiting; try again in a minute")
+            if resp.ok:
+                payload = resp.json()
+                return payload if isinstance(payload, list) else [payload]
+            last = f"weather archive returned {resp.status_code}"
+        except WeatherUnavailable:
+            raise
+        except (requests.RequestException, ValueError) as exc:   # ValueError: bad JSON
+            last = f"weather archive reply unreadable ({exc.__class__.__name__})"
+        time.sleep(3 * (attempt + 1))
+    raise WeatherUnavailable(last)
 
 
 def build(climate: pd.DataFrame, outbreaks: pd.DataFrame | None,

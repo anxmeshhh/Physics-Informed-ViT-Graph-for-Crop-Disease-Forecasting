@@ -198,8 +198,9 @@ The network therefore has to learn the quantitative relationship from data.
    live pipeline while an animated diagram lights up block by block (inputs ->
    vision transformer, disease weather, farm network -> fusion, graph network ->
    diagnosis, 7-day forecast -> what to do), each showing what it actually
-   produced. The model runs in about 20 ms; the steps are paced for people to
-   follow, and every value and timing shown is the one the server measured
+   produced, with a short technical label per block (model, size, parameters)
+   and the engine it ran on. The model runs in about 20 ms; the steps are paced
+   for people to follow, and every value and timing shown is the server's
 
 The literature survey, ablations and parameter tables remain in the API
 (`/api/literature`, `/api/demo/*`, `/api/parameters`) and in `outputs/reports/`.
@@ -249,6 +250,28 @@ Grid weather is one archive lookup per cell per date, fetched in batches and
 cached in `data/climate/grid/`; `09_go_live.py` prefetches the demo dates. The
 free archive allows about 600 lookups a minute, so stepping through several new
 dates quickly can briefly hit the limit - the page says so and retries.
+
+### Why this result: leaf, weather, farm
+
+Every leaf diagnosis carries the chain that produced it (`serve/context.py`):
+what the diagnosed disease needs (its cardinal temperatures and moisture
+requirement from the pathogen knowledge base), the weather actually recorded at
+the farm that day, how favourable that makes it over the coming week, whether
+the disease is present at the farm or arriving from neighbours, and the
+resulting 7-day forecast. A note reconciles it with the district map, which can
+say *Act now* (this week's weather favours the crop's diseases) while the farm's
+forecast is lower (the forecast target needs favourable weather **and** the
+disease nearby - `data.assign.attach_forecast_targets`). After a run the map
+moves to that farm and date and opens its card.
+
+The forecast's Low / Medium / High is read off the risk number with the
+cut-offs the level head was trained on (`data/processed/risk_thresholds.json`),
+so a label can never contradict its percentage.
+
+The demo leaves in `tests/` are each paired with a farm and an in-season date
+where the weather recorded there favoured that leaf's own disease - the way the
+benchmark assigned leaves to farms - so consecutive runs are different places
+and different weather (`scripts/pair_test_images.py`).
 
 ### Near a precise location
 

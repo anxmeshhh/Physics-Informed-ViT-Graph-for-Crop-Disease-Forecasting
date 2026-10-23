@@ -25,7 +25,7 @@ from fastapi.staticfiles import StaticFiles
 from PIL import Image
 
 from ..config import PROJECT_ROOT, load_config
-from ..data.farms import to_frame
+from ..data.farms import SITES, to_frame
 from . import bulletin, demos, heatmap, literature, nearby
 from .inference import ForecastService
 
@@ -42,6 +42,15 @@ app.add_middleware(
 )
 
 _cfg = load_config()
+_CROPS = {c for s in SITES for c in s.crops}
+
+
+def known_crop(crop: str) -> str:
+    """Reject an unknown crop with a message instead of a stack trace."""
+    if crop not in _CROPS:
+        raise HTTPException(status_code=400,
+                            detail=f"Unknown crop {crop!r}. Known: {', '.join(sorted(_CROPS))}")
+    return crop
 API_LEVEL = 4      # bump when the page starts calling a new endpoint
 _service: ForecastService | None = None
 
@@ -518,6 +527,7 @@ def climate(site_id: str, start: str = "2023-01-01", end: str = "2023-12-31"):
 @app.get("/api/forecast")
 def regional(crop: str, date: str):
     """Risk map across every farm growing this crop on a date."""
+    known_crop(crop)
     svc = service()
     try:
         when = Date.fromisoformat(date)
@@ -617,6 +627,7 @@ async def predict_stream(
 @app.get("/api/graph")
 def graph_preview(crop: str, date: str, window: int = 7):
     """Edges of the spatial graph among farms growing a crop, for the map."""
+    known_crop(crop)
     svc = service()
     sub, edges = bulletin.crop_edges(_cfg, crop)
     if not edges:
@@ -634,6 +645,7 @@ def graph_preview(crop: str, date: str, window: int = 7):
 def district_bulletin(crop: str, date: str):
     """Every district growing a crop: alert level, threat, trend, 7-day outlook
     and recommended actions. Served from the physics, so it needs no checkpoint."""
+    known_crop(crop)
     try:
         when = Date.fromisoformat(date)
     except ValueError as exc:
@@ -679,6 +691,7 @@ def near_location(lat: float, lon: float, crop: str, date: str, radius_km: float
 @app.get("/api/heatmap")
 def risk_surface(crop: str, date: str):
     """Risk on a 1 degree grid across the monitored region, for the map."""
+    known_crop(crop)
     try:
         when = Date.fromisoformat(date)
     except ValueError as exc:

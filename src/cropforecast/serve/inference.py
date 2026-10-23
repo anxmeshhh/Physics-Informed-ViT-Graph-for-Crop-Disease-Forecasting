@@ -270,14 +270,27 @@ class ForecastService:
              f"1 node, 0 edges -> {tuple(z.shape)[-1]}-d")
 
         class_logits = self.model.classifier(z)
+        # A farmer knows what they grow. When the crop is stated, choose only
+        # among that crop's classes: the weather and season stream otherwise
+        # pulls an off-season leaf toward whatever crop *is* in season at the
+        # farm (a tomato leaf in a Hooghly January reads as potato).
+        allowed = [i for i, c in enumerate(self.class_names)
+                   if crop is None or c.split("___", 1)[0] == crop]
+        if not allowed:
+            raise ValueError(f"No disease classes for crop {crop!r}")
+        if crop is not None:
+            mask = torch.full_like(class_logits, float("-inf"))
+            mask[:, allowed] = 0.0
+            class_logits = class_logits + mask
         probs = torch.softmax(class_logits, dim=-1)[0]
-        order = probs.argsort(descending=True)[:top_k]
+        order = probs.argsort(descending=True)[:min(top_k, len(allowed))]
         top = [{"class": self.class_names[int(i)],
                 "probability": float(probs[int(i)])} for i in order]
         best = self.class_names[int(order[0])]
         best_crop = best.split("___", 1)[0]
         yield step("Diagnosis", "Classification head",
-             f"Softmax over {len(self.class_names)} classes",
+             (f"Softmax over the {len(allowed)} {crop.replace('_', ' ')} classes (crop stated)"
+              if crop else f"Softmax over {len(self.class_names)} classes"),
              f"{best.split('___', 1)[-1].replace('_', ' ')} "
              f"@ {float(probs[int(order[0])]) * 100:.1f}%")
 

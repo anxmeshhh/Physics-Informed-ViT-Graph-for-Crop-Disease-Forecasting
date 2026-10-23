@@ -325,13 +325,44 @@ backend it connected to, and if it cannot reach one it shows a box to paste a
 backend URL into. The tunnel URL on its own also serves the full dashboard,
 straight from the presenter's machine, as a fallback.
 
-**Deploying the frontend once.** `netlify.toml` publishes
-`src/cropforecast/serve/web`, and `web/_redirects` maps the `/static/` prefix
-that FastAPI uses, so the same `index.html` works on both hosts. Either connect
-this repository in the Netlify dashboard (no build command), or drag the
-`src/cropforecast/serve/web` folder onto <https://app.netlify.com/drop>. Then
-put the site URL in `configs/default.yaml` under `serve.frontend_url` so the
-launcher prints the complete share link.
+**Deploying the frontend on Netlify (once).** `netlify.toml` publishes
+`src/cropforecast/serve/web` with no build step, and `web/_redirects` maps the
+`/static/` prefix FastAPI uses, so the same `index.html` works on both hosts.
+
+1. Sign in at <https://app.netlify.com> (a free account is enough).
+2. **Add new site -> Import an existing project -> GitHub**, and pick this
+   repository. Branch `main`. Leave the build command empty; the publish
+   directory is read from `netlify.toml`. Press **Deploy**.
+3. **Site configuration -> Change site name** to something short, e.g.
+   `crop-early-warning-0696`, giving `https://crop-early-warning-0696.netlify.app`.
+4. Put that URL in `configs/default.yaml` under `serve.frontend_url`, so
+   `09_go_live.py` prints the complete share link.
+
+Every push to `main` redeploys the page automatically. Without GitHub, drag the
+`src/cropforecast/serve/web` folder onto <https://app.netlify.com/drop> instead.
+
+**On demo day.** Run `python scripts/09_go_live.py`, wait for `SHARE THIS LINK`,
+and open or share that link - the Netlify page with `?api=<tunnel>` appended.
+The tunnel address changes every launch, so share the link printed *that* time.
+If the page says "backend offline", paste the printed tunnel URL into the box
+in its header.
+
+### Checking the demo before presenting
+
+    python scripts/10_audit_demo.py                      # local server
+    python scripts/10_audit_demo.py --url <tunnel URL>   # what the panel will hit
+
+Runs every demo leaf through the single-shot and streamed pipelines and
+cross-checks the answer against everything else describing that farm and day -
+the bulletin card, the heatmap, the location view, the "why this result" chain -
+and against `tests/index.csv`: about 800 checks, exit code 1 on any mismatch.
+
+Two cautions the dashboard raises on its own, both measured with this audit's
+data: an **off-season date** (across the 23 demo leaves at their farms through
+2023, 99.4% correct in season vs 88.5% off season - off season the model drifts
+toward whatever crop *is* in season there), and a **farm that does not grow the
+crop**. Stating the crop in Live Diagnosis restricts the diagnosis to that
+crop's diseases, which recovers the off-season cases.
 
 ## The main negative result, stated plainly
 

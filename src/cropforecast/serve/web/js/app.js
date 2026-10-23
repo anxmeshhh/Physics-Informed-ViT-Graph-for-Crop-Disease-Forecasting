@@ -382,6 +382,21 @@ function showResult(d) {
   $("diagCrop").textContent = pretty(d.crop);
   $("diagOrganism").textContent = d.organism || "";
   $("diagConf").textContent = `${(d.confidence * 100).toFixed(1)}%`;
+  // An unsure diagnosis says so, with the runner-up, rather than reading as fact.
+  const second = d.top_k && d.top_k[1];
+  // Cautions, each a case where the model is outside what it was trained on.
+  const ctx = d.context || {}, cautions = [];
+  if (ctx.in_season === false) {
+    cautions.push(`${fmtDate(d.date)} is outside the ${esc((ctx.crop_label || pretty(d.crop)).toLowerCase())}
+      growing season (${esc(ctx.season)}). The model learned from in-season fields, so off-season results
+      are less reliable.`);
+  }
+  if (d.confidence < 0.6 && second) {
+    cautions.push(`Not certain - the next most likely is <b>${esc(pretty(second.class))}</b>
+      (${(second.probability * 100).toFixed(1)}%). Confirm in the field before acting.`);
+  }
+  $("diagUnsure").hidden = !cautions.length;
+  $("diagUnsure").innerHTML = cautions.join("<br>");
   $("sevPill").className = `sev-pill ${worst}`;
   $("sevPill").textContent = `Spread risk: ${worst} · ${ALERT_WORD[worst]}`;
   $("diagWhere").textContent =
@@ -1228,6 +1243,11 @@ function renderWhy(d) {
         ? `${mapSays} The disease is ${where}, so this farm's forecast is <b>${worst}</b>.`
         : `${mapSays} This week's weather alone is enough to put this farm's forecast at <b>${worst}</b>.`;
     }
+  }
+  if (c.grown_here === false) {
+    note = `${esc(d.site.name)} is not one of the monitored ${crop} districts, so the district map has
+      no card for it and shows the ${crop} districts instead. The weather and forecast above are still
+      computed for ${esc(d.site.name)}.`;
   }
   $("whyNote").innerHTML = note;
 }

@@ -203,7 +203,7 @@
       <select id="siteSelect"></select>
       <label for="dateInput">Date</label>
       <input type="date" id="dateInput" min="2021-01-01" max="2023-12-24" value="2023-07-15">
-      <label for="cropSelect">Crop <span class="hint">optional</span></label>
+      <label for="cropSelect">Crop <span class="hint">optional &middot; set it for off-season dates</span></label>
       <select id="cropSelect"><option value="">Infer from image</option></select>
       <button class="run cta wide" id="predictBtn">Run full pipeline</button>
       <p class="err" id="predictError"></p>
@@ -223,6 +223,7 @@
             </div>
             <div class="sev-pill" id="sevPill"></div>
           </div>
+          <p class="diag-unsure" id="diagUnsure" hidden></p>
           <p class="advisory" id="advisory"></p>
           <div class="diag-where" id="diagWhere"></div>
         </div>

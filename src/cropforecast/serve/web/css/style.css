@@ -708,3 +708,7 @@ details.tech[open] summary { margin-bottom: 8px; }
   border-radius: 6px; padding: 2px 6px; display: inline-block; }
 .fn-tech:empty { display: none; }
 .how-tech { margin-top: 6px; font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+
+.diag-unsure { margin: 0 0 10px; padding: 9px 12px; border-radius: 8px; font-size: 13px;
+  background: #fdf3e2; border: 1px solid #f7d9a8; color: #7c4a03; }
+.diag-unsure[hidden] { display: none; }

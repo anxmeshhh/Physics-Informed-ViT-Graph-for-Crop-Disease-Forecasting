@@ -26,6 +26,7 @@ from datetime import timedelta
 import numpy as np
 import pandas as pd
 
+from ..data.farms import CROP_SEASONS
 from ..physics.contagion import inoculum_term
 from ..physics.epidemiology import (PROFILES, crop_pressure, moisture_response,
                                     temperature_response)
@@ -39,6 +40,26 @@ MOISTURE_NEED = {
     "vector_warm": "warm weather for its insect carrier; heavy rain holds it back",
     "neutral": "little - it spreads by contact",
 }
+
+
+MONTHS = "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec".split()
+
+
+def season(crop: str, when: Date) -> tuple[bool, str]:
+    """Is ``when`` inside the crop's growing season, and what is that season?
+
+    The model learned from fields photographed in season. Off season the same
+    leaf is diagnosed correctly far less often (across the 23 demo leaves at
+    their own farms through 2023: 99.4% in season, 88.5% off season), so a
+    result says when it is outside what the model knows.
+    """
+    if crop not in CROP_SEASONS:
+        return True, ""
+    (m, d), length = CROP_SEASONS[crop]
+    inside = any(Date(y, m, d) <= when < Date(y, m, d) + timedelta(days=length)
+                 for y in (when.year, when.year - 1))
+    end = Date(2023, m, d) + timedelta(days=length - 1)
+    return inside, f"{MONTHS[m - 1]}-{MONTHS[end.month - 1]}"
 
 
 def _grade(score: float) -> str:
@@ -83,8 +104,8 @@ def disease_vs_weather(disease: str, weather: pd.DataFrame, today: pd.Timestamp)
         "temperature_score": round(float(temp[0]), 3), "temperature_note": t_note,
         "temperature_grade": _grade(float(temp[0])),
         "moisture_score": round(float(moist[0]), 3), "moisture_grade": _grade(float(moist[0])),
-        "today": round(float(fav[0]), 3), "series": [round(float(v), 3) for v in fav],
-        "peak": round(float(fav[k]), 3), "peak_day": k,
+        "today": round(float(fav[0]), 4), "series": [round(float(v), 4) for v in fav],
+        "peak": round(float(fav[k]), 4), "peak_day": k,
         "band": bulletin.band(float(fav.max())),
     }
 
@@ -121,13 +142,17 @@ def case_context(climate: pd.DataFrame, outbreaks: pd.DataFrame | None, crop: st
 
     return {
         "crop_label": bulletin.crop_label(crop),
+        # A farm picked by hand may not grow this crop; the bulletin then has
+        # no card for it, and the page has to say why.
+        "grown_here": crop in site.crops,
+        "in_season": season(crop, when)[0], "season": season(crop, when)[1],
         "this_disease": disease_vs_weather(disease, w, today),
         "district": {
             "alert": district["alert"], "alert_text": district["alert_text"],
             "peak_risk": district["peak_risk"], "peak_day": district["peak_day"],
             "threat": district["threat"]["name"] if district["threat"] else None,
         },
-        "disease_present": round(here, 3),
-        "disease_arriving": round(incoming, 3),
+        "disease_present": round(here, 4),
+        "disease_arriving": round(incoming, 4),
         "arriving_from": top,
     }

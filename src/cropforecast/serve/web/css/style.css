@@ -57,6 +57,10 @@ body {
 .sys.ok  { background: #eef7f1; border-color: #cfe3d6; color: var(--ok); }
 .sys.bad { background: #fdf0f2; border-color: #f0d3d8; color: var(--high); }
 .src { font-size: 12px; color: var(--ink-faint); margin-top: 8px; }
+.api-form { display: flex; gap: 6px; margin-top: 10px; justify-content: flex-end; }
+.api-form[hidden] { display: none; }
+.api-form input { width: 260px; max-width: 60vw; padding: 7px 10px; font-family: var(--mono); font-size: 12.5px; border: 1px solid var(--rule); border-radius: 4px; background: var(--paper); color: var(--ink); }
+.api-form button.run { padding: 7px 14px; }
 
 /* ---------------- layout ---------------- */
 .layout {
@@ -318,12 +322,14 @@ select:focus, input:focus { outline: none; border-color: var(--navy); }
   padding: 14px 16px; background: var(--paper);
 }
 .mod.planned { background: var(--cream); border-style: dashed; }
+.mod.roadmap { background: var(--cream); border-style: dashed; opacity: .8; }
 .mod-mark {
   width: 22px; height: 22px; border-radius: 50%; margin-top: 2px;
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 700; color: #fff; background: var(--ok);
 }
 .mod.planned .mod-mark { background: transparent; border: 1.5px dashed var(--ink-faint); }
+.mod.roadmap .mod-mark { background: transparent; border: 1.5px dashed var(--ink-faint); color: var(--ink-faint); }
 .mod-top { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 5px; }
 .mod-name { font-weight: 650; font-size: 14px; color: var(--navy); }
 .mod-phase {

@@ -1,0 +1,4 @@
+# Netlify hosts only the static frontend; the API runs on the presenter's
+# machine behind a tunnel (scripts/09_go_live.py prints the link to share).
+[build]
+  publish = "src/cropforecast/serve/web"

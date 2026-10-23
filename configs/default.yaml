@@ -109,3 +109,5 @@ training:
 serve:
   host: "127.0.0.1"
   port: 8000
+  # Netlify URL of the static frontend; scripts/09_go_live.py appends ?api=<tunnel>.
+  frontend_url: ""

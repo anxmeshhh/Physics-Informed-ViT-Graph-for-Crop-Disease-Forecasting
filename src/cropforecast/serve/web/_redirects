@@ -1,0 +1,3 @@
+# index.html asks for /static/... because FastAPI mounts this folder there.
+# On Netlify the folder is the site root, so map the prefix away.
+/static/*  /:splat  200

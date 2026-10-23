@@ -4,8 +4,7 @@ A complete, runnable implementation of the architecture in the project deck.
 Every block in the architecture diagram maps to a module you can run and
 demonstrate on its own.
 
-**Team** — Animesh Gupta (RA2311026010375), Apurva Singh (RA2311026010376),
-Aastha Hotwani (RA2311026010389), Harsh Khetan (RA2311026010421)
+**Animesh Gupta** · Panel Number: 0696 · Seva Innovation Challenge
 
 ---
 
@@ -199,6 +198,38 @@ Later sections cover the consolidated research gap, the methodology block by
 block, the dataset and its honest provenance, single-image inference, the
 regional risk map, and the results tables.
 
+## Going live: frontend on Netlify, model on your machine
+
+The model stays on the presenter's PC (it needs the GPU and the trained
+weights); only the static page is hosted. One command brings the backend up and
+makes it reachable from anywhere:
+
+```bash
+python scripts/09_go_live.py
+```
+
+It starts the API, warms the model up with one real prediction so the first run
+in front of an audience is as fast as every later one, opens a Cloudflare quick
+tunnel (`cloudflared`, no account needed), and prints the link to share:
+
+```
+SHARE THIS LINK  : https://<site>.netlify.app/?api=https://<random>.trycloudflare.com
+```
+
+The tunnel URL changes on every launch, so it travels in the link as `?api=`
+rather than being baked into the Netlify build. The page remembers the last
+backend it connected to, and if it cannot reach one it shows a box to paste a
+backend URL into. The tunnel URL on its own also serves the full dashboard,
+straight from the presenter's machine, as a fallback.
+
+**Deploying the frontend once.** `netlify.toml` publishes
+`src/cropforecast/serve/web`, and `web/_redirects` maps the `/static/` prefix
+that FastAPI uses, so the same `index.html` works on both hosts. Either connect
+this repository in the Netlify dashboard (no build command), or drag the
+`src/cropforecast/serve/web` folder onto <https://app.netlify.com/drop>. Then
+put the site URL in `configs/default.yaml` under `serve.frontend_url` so the
+launcher prints the complete share link.
+
 ## The main negative result, stated plainly
 
 **The graph neural network does not improve accuracy on this benchmark.**
@@ -261,7 +292,8 @@ src/cropforecast/
   explain/                   vision (Grad-CAM, rollout), attribution (IG, SHAP, graph)
   train/                     prepare, trainer
   serve/                     FastAPI api.py + inference.py + web/ dashboard
-scripts/                     01..06, run in order
+scripts/                     01..08 run in order; 09_go_live.py for a public demo
+netlify.toml                 static frontend hosting
 outputs/                     figures, checkpoints, reports
 ```
 

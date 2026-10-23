@@ -93,7 +93,7 @@ def title_slide(prs, main, sub, authors):
     rect(s, 0, 0, W, H, fill=NAVY)
     rect(s, Inches(0.9), Inches(2.35), Inches(1.1), Pt(4), fill=RGBColor(0x4A, 0xDE, 0x80))
     text(s, Inches(0.9), Inches(1.1), Inches(11.5), Inches(1.2),
-         [("MINOR PROJECT  ·  DEPARTMENT OF COMPUTING TECHNOLOGIES", 12, True,
+         [("SEVA INNOVATION CHALLENGE  ·  PANEL NUMBER 0696", 12, True,
            RGBColor(0x8F, 0xA8, 0xC8))])
     text(s, Inches(0.9), Inches(2.7), Inches(11.5), Inches(2.2),
          [(main, 36, True, WHITE)], spacing=1.12)
@@ -255,7 +255,7 @@ def closing_slide(prs, repo):
          [("Thank you", 42, True, WHITE)])
     rect(s, Inches(0.9), Inches(3.25), Inches(1.1), Pt(4), fill=RGBColor(0x4A, 0xDE, 0x80))
     text(s, Inches(0.9), Inches(3.7), Inches(11.5), Inches(1.4),
-         [("Animesh Gupta   ·   Apurva Singh   ·   Aastha Hotwani   ·   Harsh Khetan",
+         [("Animesh Gupta   ·   Panel Number: 0696",
            16, False, RGBColor(0xB8, 0xCA, 0xE2))])
     text(s, Inches(0.9), Inches(4.6), Inches(11.5), Inches(0.6),
          [(repo, 13, False, RGBColor(0x8F, 0xA8, 0xC8))])
@@ -302,7 +302,7 @@ def build() -> Path:
         prs,
         "Vision Transformer with Physics-Informed\nGraph Learning for Crop Disease Forecasting",
         "Predicting crop disease risk 1–7 days before symptoms appear",
-        "Animesh Gupta  ·  Apurva Singh  ·  Aastha Hotwani  ·  Harsh Khetan",
+        "Animesh Gupta  ·  Panel Number: 0696",
     )
 
     # 2 ------------------------------------------------------------------

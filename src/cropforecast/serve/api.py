@@ -322,12 +322,15 @@ def parameters():
 
 @app.get("/api/progress")
 def progress():
-    """Project completion, computed from artefacts that actually exist.
+    """Prototype completion, computed from artefacts that actually exist.
 
     Each module names the files that prove it ran. A module is only counted as
     delivered if every one of those files is on disk, so the percentage on the
     page cannot drift ahead of the work - deleting a report demotes its module
     on the next refresh. Weights are relative effort, not file counts.
+
+    Roadmap modules lie beyond the prototype's scope. They are listed so the
+    page says what comes next, but they carry no weight in the percentage.
     """
     root = PROJECT_ROOT
     ck = Path(_cfg.paths.checkpoints)
@@ -432,7 +435,16 @@ def progress():
                          WEB_DIR / "index.html"),
         },
         {
-            "id": "field", "phase": "Remaining", "weight": 10,
+            "id": "public", "phase": "Delivery", "weight": 3,
+            "name": "Public deployment",
+            "what": "Frontend hosted on Netlify, calling the model on the presenter's "
+                    "machine through a Cloudflare tunnel; one command brings it live",
+            "modules": "netlify.toml, web/_redirects, scripts/09_go_live.py",
+            "done": have(root / "netlify.toml", WEB_DIR / "_redirects",
+                         root / "scripts/09_go_live.py"),
+        },
+        {
+            "id": "field", "phase": "Roadmap", "weight": 0,
             "name": "Field validation",
             "what": "Recorded outbreak surveillance in place of the simulated "
                     "epidemic, and leaves photographed in the field rather than "
@@ -441,15 +453,15 @@ def progress():
             "done": False,
         },
         {
-            "id": "deploy", "phase": "Remaining", "weight": 6,
-            "name": "Farmer-facing deployment",
+            "id": "deploy", "phase": "Roadmap", "weight": 0,
+            "name": "Farmer-facing mobile app",
             "what": "Model compression and a mobile or SMS delivery path, with "
                     "live forecast forcing instead of reanalysis",
             "modules": "not started",
             "done": False,
         },
         {
-            "id": "paper", "phase": "Remaining", "weight": 6,
+            "id": "paper", "phase": "Roadmap", "weight": 0,
             "name": "Write-up and submission",
             "what": "The leakage finding and the measured cost of the graph are "
                     "both publishable; the manuscript is not yet drafted",
@@ -458,14 +470,18 @@ def progress():
         },
     ]
 
-    total = sum(m["weight"] for m in modules)
-    earned = sum(m["weight"] for m in modules if m["done"])
+    scope = [m for m in modules if m["phase"] != "Roadmap"]
+    total = sum(m["weight"] for m in scope)
+    earned = sum(m["weight"] for m in scope if m["done"])
     for m in modules:
-        m["status"] = "delivered" if m["done"] else "planned"
-        m["share"] = round(100 * m["weight"] / total, 1) if total else 0.0
+        if m["phase"] == "Roadmap":
+            m["status"], m["share"] = "roadmap", None
+        else:
+            m["status"] = "delivered" if m["done"] else "planned"
+            m["share"] = round(100 * m["weight"] / total, 1) if total else 0.0
 
     phases: dict[str, dict] = {}
-    for m in modules:
+    for m in scope:
         ph = phases.setdefault(m["phase"], {"phase": m["phase"], "w": 0, "e": 0,
                                             "done": 0, "total": 0})
         ph["w"] += m["weight"]
@@ -477,8 +493,9 @@ def progress():
 
     return {
         "percent": round(100 * earned / total) if total else 0,
-        "modules_done": sum(1 for m in modules if m["done"]),
-        "modules_total": len(modules),
+        "modules_done": sum(1 for m in scope if m["done"]),
+        "modules_total": len(scope),
+        "roadmap_total": len(modules) - len(scope),
         "phases": list(phases.values()),
         "modules": modules,
     }

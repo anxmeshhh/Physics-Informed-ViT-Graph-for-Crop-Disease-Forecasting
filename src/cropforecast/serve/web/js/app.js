@@ -11,9 +11,35 @@ let samples = [], sampleIdx = -1;
 const demoCharts = {};
 let pipeTimer = null, pipeStarted = 0;
 
+/* -------------------------------------------------------------- backend */
+/* Where the API lives. Served by FastAPI the page and the API share an origin,
+   so the base is empty. Deployed as a static site (Netlify) the backend runs on
+   the presenter's machine behind a tunnel, so the base comes from ?api=, else
+   from the last backend this browser connected to - tried only after the same
+   origin fails, so a stale tunnel can never shadow the server the page came from. */
+const API_KEY = "cropcast.api";
+let API = "";
+const api = (path) => API + path;
+const cleanUrl = (u) => (u || "").trim().replace(/\/+$/, "");
+
+async function connect() {
+  const fromQuery = cleanUrl(new URLSearchParams(location.search).get("api"));
+  if (fromQuery) {
+    API = fromQuery;
+    try { localStorage.setItem(API_KEY, fromQuery); } catch { /* private mode */ }
+    return getJSON("/api/health");
+  }
+  try { return await getJSON("/api/health"); } catch { /* not served by the API */ }
+  let saved = "";
+  try { saved = cleanUrl(localStorage.getItem(API_KEY)); } catch { /* private mode */ }
+  if (!saved) throw new Error("no backend configured");
+  API = saved;
+  return getJSON("/api/health");
+}
+
 /* ------------------------------------------------------------------ utils */
 async function getJSON(url) {
-  const res = await fetch(url);
+  const res = await fetch(api(url));
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || `${res.status} ${res.statusText}`);
   return body;
@@ -38,13 +64,19 @@ function table(rows, cols, opts = {}) {
 /* ------------------------------------------------------------------- boot */
 async function boot() {
   try {
-    const h = await getJSON("/api/health");
+    const h = await connect();
+    $("docsLink").href = api("/docs");
     const el = $("sysStatus");
     el.className = h.model_trained ? "sys ok" : "sys bad";
     el.innerHTML = `System status: <b>${h.model_trained ? "model loaded" : "model not trained"}</b>`;
+    if (API) $("apiHost").textContent = `Backend: ${new URL(API).host}`;
   } catch {
     $("sysStatus").className = "sys bad";
     $("sysStatus").innerHTML = "System status: <b>backend offline</b>";
+    // Same origin failing means the server is down; a static host means no
+    // backend has been named yet. Either way, offer to point at one.
+    $("apiInput").value = API;
+    $("apiForm").hidden = false;
     return;
   }
   renderMethod();
@@ -431,7 +463,7 @@ async function loadProgress() {
 
   const mast = $("mastPct");
   mast.hidden = false;
-  mast.innerHTML = `Build complete: <b>${d.percent}%</b>`;
+  mast.innerHTML = `Prototype complete: <b>${d.percent}%</b>`;
 
   $("phaseBars").innerHTML = d.phases.map((p) => `
     <div class="pbar">
@@ -447,12 +479,12 @@ async function loadProgress() {
 
   $("moduleList").innerHTML = d.modules.map((m) => `
     <div class="mod ${esc(m.status)}">
-      <div class="mod-mark" aria-hidden="true">${m.done ? "&check;" : ""}</div>
+      <div class="mod-mark" aria-hidden="true">${m.done ? "&check;" : m.status === "roadmap" ? "&rarr;" : ""}</div>
       <div class="mod-main">
         <div class="mod-top">
           <span class="mod-name">${esc(m.name)}</span>
           <span class="mod-phase">${esc(m.phase)}</span>
-          <span class="mod-share">${m.share}%</span>
+          <span class="mod-share">${m.share == null ? "next" : `${m.share}%`}</span>
         </div>
         <p class="mod-what">${esc(m.what)}</p>
         <code class="mod-files">${esc(m.modules)}</code>
@@ -546,7 +578,7 @@ $("sampleBtn").addEventListener("click", async () => {
     sampleIdx = (sampleIdx + 1) % samples.length;
     const s = samples[sampleIdx];
 
-    const res = await fetch(`/api/samples/${encodeURIComponent(s.file)}`);
+    const res = await fetch(api(`/api/samples/${encodeURIComponent(s.file)}`));
     if (!res.ok) throw new Error(`Could not load ${s.file}`);
     const blob = await res.blob();
     setFile(new File([blob], s.file, { type: blob.type || "image/jpeg" }));
@@ -600,7 +632,7 @@ async function runPredict() {
   if ($("cropSelect").value) fd.append("crop", $("cropSelect").value);
 
   try {
-    const res = await fetch("/api/predict/stream", { method: "POST", body: fd });
+    const res = await fetch(api("/api/predict/stream"), { method: "POST", body: fd });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || "Prediction failed");
@@ -870,5 +902,15 @@ async function updateMap() {
     btn.disabled = false; btn.textContent = "Update map";
   }
 }
+
+/* Reload with ?api= so the URL on screen is the link to share. */
+$("apiForm").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const u = cleanUrl($("apiInput").value);
+  if (!u) return;
+  const next = new URL(location.href);
+  next.searchParams.set("api", u);
+  location.href = next.toString();
+});
 
 boot();

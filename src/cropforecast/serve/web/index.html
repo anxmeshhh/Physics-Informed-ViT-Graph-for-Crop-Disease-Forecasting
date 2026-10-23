@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vision Transformer with Physics-Informed Graph Learning for Climate-Adaptive Crop Disease Forecasting</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%BF%3C/text%3E%3C/svg%3E">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="/static/css/style.css">
 </head>
@@ -13,18 +14,22 @@
 <header class="masthead">
   <div class="wrap mast-inner">
     <div>
-      <div class="dept">Department of Computing Technologies &middot; Minor Project</div>
+      <div class="dept">Seva Innovation Challenge &middot; Working Prototype</div>
       <h1 class="doc-title">Vision Transformer with Physics-Informed Graph Learning
         <span>for Climate-Adaptive Crop Disease Forecasting</span></h1>
       <div class="authors">
-        <span>Animesh Gupta</span><span>Apurva Singh</span>
-        <span>Aastha Hotwani</span><span>Harsh Khetan</span>
+        <span><b>Animesh Gupta</b></span><span>Panel Number: 0696</span>
       </div>
     </div>
     <div class="mast-status">
       <div id="mastPct" class="mast-pct" hidden></div>
       <div id="sysStatus" class="sys">checking&hellip;</div>
       <div class="src">PlantVillage &middot; Open-Meteo ERA5</div>
+      <div class="src" id="apiHost"></div>
+      <form id="apiForm" class="api-form" hidden>
+        <input type="url" id="apiInput" placeholder="https://&hellip;.trycloudflare.com" required>
+        <button class="run" type="submit">Connect</button>
+      </form>
     </div>
   </div>
 </header>
@@ -101,9 +106,9 @@
 <section id="s-status">
   <h2><span class="num">2</span> Project Status</h2>
   <p class="sub-lead">Completion is computed from artefacts that exist on disk &mdash;
-    trained weights, result tables, generated figures. A module counts as delivered
-    only when every file that proves it ran is present, so this figure cannot run
-    ahead of the work.</p>
+    trained weights, result tables, generated figures, the deployment itself. A module
+    counts as delivered only when every file that proves it ran is present, so this
+    figure cannot run ahead of the work. Roadmap items are listed but not counted.</p>
 
   <div class="status-head">
     <div class="donut-wrap">
@@ -113,7 +118,7 @@
       </svg>
       <div class="donut-label">
         <div class="donut-pct" id="progPct">&mdash;</div>
-        <div class="donut-sub" id="progSub">of full scope</div>
+        <div class="donut-sub" id="progSub">of prototype scope</div>
       </div>
     </div>
     <div class="phase-bars" id="phaseBars"></div>
@@ -393,7 +398,7 @@
 <footer class="foot">
   <div class="wrap">
     <span>PlantVillage (CC BY-SA 3.0) &middot; Open-Meteo Historical Weather API (ERA5)</span>
-    <span><a href="/docs">API reference</a></span>
+    <span>Animesh Gupta &middot; Panel Number: 0696 &middot; <a href="/docs" id="docsLink">API reference</a></span>
   </div>
 </footer>
 

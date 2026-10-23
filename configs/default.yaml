@@ -119,4 +119,4 @@ serve:
   backend_url: "https://gustless-bryant-unauthoritative.ngrok-free.dev"
   ngrok_path: ""              # blank = look on PATH, then on the Desktop
   # Netlify URL of the static frontend, printed as the link to share.
-  frontend_url: ""
+  frontend_url: "https://krishikavach0696.netlify.app"

@@ -338,8 +338,15 @@ straight from the presenter's machine, as a fallback.
 4. Put that URL in `configs/default.yaml` under `serve.frontend_url`, so
    `09_go_live.py` prints the complete share link.
 
-Every push to `main` redeploys the page automatically. Without GitHub, drag the
-`src/cropforecast/serve/web` folder onto <https://app.netlify.com/drop> instead.
+Every push to `main` redeploys the page automatically.
+
+**Or drag and drop.** `frontend_deploy/` at the project root is the same static
+site, ready to drag onto <https://app.netlify.com/drop> (sign in first, or the
+site expires after an hour). It is rebuilt from `src/cropforecast/serve/web` by
+`python scripts/11_build_frontend.py`, and `09_go_live.py` rebuilds it on every
+launch, so it always matches the page being served. Re-drag it only when the
+page itself changes - a new tunnel needs no new upload, because the backend
+travels in the link as `?api=`.
 
 **On demo day.** Run `python scripts/09_go_live.py`, wait for `SHARE THIS LINK`,
 and open or share that link - the Netlify page with `?api=<tunnel>` appended.

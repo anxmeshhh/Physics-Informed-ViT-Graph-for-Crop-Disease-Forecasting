@@ -15,6 +15,7 @@ as ?api= rather than it being baked into the Netlify build.
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import http.client
 import json
 import re
@@ -215,6 +216,13 @@ def main() -> None:
 
     host, port = cfg.serve.host, cfg.serve.port
     local = f"http://{host}:{port}"
+
+    # Keep the drag-and-drop folder identical to the page this server serves.
+    spec = importlib.util.spec_from_file_location(
+        "build_frontend", Path(__file__).with_name("11_build_frontend.py"))
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    builder.build(quiet=True)
 
     print("Starting backend ...")
     server = uvicorn.Server(uvicorn.Config("cropforecast.serve.api:app",

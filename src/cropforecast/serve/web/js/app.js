@@ -261,6 +261,10 @@ $("sampleBtn").addEventListener("click", async () => {
 /* Clear the previous run so a loaded sample never sits next to a stale
    diagnosis from the sample before it. */
 function resetRun() {
+  // The previous run's farm must not stay highlighted on the map while the
+  // next run's bulletin is still loading - for a moment it named two farms.
+  document.querySelectorAll("#alertList .acard.focus").forEach((c) => c.classList.remove("focus"));
+  if (leafletMap) leafletMap.closePopup();
   $("resultBody").hidden = true;
   $("resultEmpty").hidden = false;
   $("resultEmpty").textContent = "Press Run full pipeline.";

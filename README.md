@@ -312,18 +312,29 @@ python scripts/09_go_live.py
 ```
 
 It starts the API, warms the model up with one real prediction so the first run
-in front of an audience is as fast as every later one, opens a Cloudflare quick
-tunnel (`cloudflared`, no account needed), and prints the link to share:
+in front of an audience is as fast as every later one, prefetches the heatmap
+weather for the demo dates, and puts the machine on the internet.
 
-```
-SHARE THIS LINK  : https://<site>.netlify.app/?api=https://<random>.trycloudflare.com
-```
+**A permanent address (ngrok).** With `serve.tunnel: ngrok` in
+`configs/default.yaml`, the backend is always at `serve.backend_url` - a free
+ngrok static domain, the same every launch. That address is written into
+`frontend_deploy/`, so the Netlify page finds the backend on its own: the link
+to share never changes and carries nothing extra. The launcher reuses an ngrok
+already serving that domain to this machine, restarts it if it drops mid-demo,
+and explains the usual ngrok errors (another session already running, not
+logged in). ngrok's free plan shows browsers a warning page; the dashboard sends
+the documented `ngrok-skip-browser-warning` header on every API call, so the
+Netlify page is never stopped by it. One-time setup: a free ngrok account,
+`ngrok config add-authtoken <token>`, and the claimed static domain as
+`serve.backend_url`.
 
-The tunnel URL changes on every launch, so it travels in the link as `?api=`
-rather than being baked into the Netlify build. The page remembers the last
-backend it connected to, and if it cannot reach one it shows a box to paste a
-backend URL into. The tunnel URL on its own also serves the full dashboard,
-straight from the presenter's machine, as a fallback.
+**No account (Cloudflare quick tunnel).** `python scripts/09_go_live.py --tunnel
+cloudflare` uses a Cloudflare quick tunnel instead - nothing to sign up for, but
+a new random address every launch, so the share link carries it as `?api=`.
+
+The page decides where its backend is in this order: a `?api=` in the link, the
+address built into a static deploy, the server it was loaded from, and the last
+backend this browser used. If none answers, the header offers a box to paste one.
 
 **Deploying the frontend on Netlify (once).** `netlify.toml` publishes
 `src/cropforecast/serve/web` with no build step, and `web/_redirects` maps the

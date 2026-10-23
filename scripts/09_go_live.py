@@ -43,6 +43,7 @@ from cropforecast.config import PROJECT_ROOT, load_config  # noqa: E402
 TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
 CLOUDFLARED_DEFAULTS = [r"C:\Program Files (x86)\cloudflared\cloudflared.exe",
                         r"C:\Program Files\cloudflared\cloudflared.exe"]
+NGROK_DEFAULTS = [Path.home() / "Desktop" / "ngrok.exe"]
 
 
 def get(url: str, timeout: float = 10) -> int:
@@ -205,6 +206,77 @@ def open_tunnel(port: int) -> tuple[subprocess.Popen, str]:
     return proc, found[0]
 
 
+# ngrok's free plan shows browsers a warning page instead of the API unless
+# this header is sent; the dashboard sends it, and so must the health checks.
+NGROK_SKIP = {"ngrok-skip-browser-warning": "1"}
+NGROK_ERRORS = {
+    "ERR_NGROK_108": "another ngrok is already running on this account (perhaps the one "
+                     "for n8n). The free plan allows one at a time - close it and rerun.",
+    "ERR_NGROK_334": "this domain is already online from another ngrok window. Close that "
+                     "window (Ctrl+C) and rerun, or point it at port {port}.",
+    "ERR_NGROK_4018": "ngrok is not logged in. Run:  ngrok config add-authtoken <your token>",
+    "ERR_NGROK_105": "ngrok's authtoken is invalid. Copy it again from dashboard.ngrok.com "
+                     "and run:  ngrok config add-authtoken <your token>",
+}
+
+
+def ngrok_answering(url: str) -> bool:
+    """Is this machine's API reachable at the ngrok domain right now?"""
+    try:
+        req = urllib.request.Request(f"{url}/api/health", headers={
+            **NGROK_SKIP, "User-Agent": "cropcast-go-live"})
+        with urllib.request.urlopen(req, timeout=8) as res:
+            return res.status == 200 and json.load(res).get("status") == "ok"
+    except Exception:                                      # noqa: BLE001
+        return False
+
+
+def open_ngrok(port: int, url: str, path: str = "") -> subprocess.Popen | None:
+    """Serve this machine at the fixed ngrok domain; None if already served.
+
+    An ngrok already forwarding the domain to this port (one started by hand)
+    is reused rather than fought over: the free plan allows one endpoint per
+    domain, so starting a second would only fail.
+    """
+    if ngrok_answering(url):
+        print(f"  an ngrok already serves {url} to this machine - using it")
+        return None
+    exe = path or shutil.which("ngrok") or next(
+        (str(p) for p in NGROK_DEFAULTS if p.exists()), None)
+    if exe is None:
+        sys.exit("ngrok not found. Install it (winget install ngrok.ngrok), or set\n"
+                 "serve.ngrok_path in configs/default.yaml to where ngrok.exe is.")
+
+    proc = subprocess.Popen(
+        [exe, "http", str(port), f"--url={url}", "--log=stdout", "--log-format=logfmt"],
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        encoding="utf-8", errors="replace",
+    )
+    errors: list[str] = []
+    settled = threading.Event()
+
+    def pump():
+        # Keep draining ngrok's log for its whole life, like cloudflared's.
+        for line in proc.stdout:
+            if "ERR_NGROK" in line:
+                errors.append(line)
+                settled.set()
+            elif "started tunnel" in line:
+                settled.set()
+
+    threading.Thread(target=pump, daemon=True).start()
+    settled.wait(30)
+    if errors:
+        proc.terminate()
+        code = next((c for c in NGROK_ERRORS if c in errors[0]), None)
+        sys.exit("ngrok could not start: " + (NGROK_ERRORS[code].format(port=port) if code
+                                              else errors[0].strip()))
+    if proc.poll() is not None:
+        sys.exit("ngrok exited straight away - run it by hand to see why:\n"
+                 f"    {exe} http {port} --url={url}")
+    return proc
+
+
 def main() -> None:
     cfg = load_config()
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -212,7 +284,13 @@ def main() -> None:
                         help="Netlify URL of the deployed frontend")
     parser.add_argument("--no-tunnel", action="store_true",
                         help="serve on this machine only")
+    parser.add_argument("--tunnel", choices=["ngrok", "cloudflare"],
+                        default=cfg.serve.get("tunnel") or "cloudflare",
+                        help="ngrok = the fixed backend_url; cloudflare = a new random URL")
     args = parser.parse_args()
+    backend_url = (cfg.serve.get("backend_url") or "").rstrip("/")
+    if args.tunnel == "ngrok" and not backend_url:
+        sys.exit("serve.tunnel is ngrok but serve.backend_url is empty in configs/default.yaml")
 
     host, port = cfg.serve.host, cfg.serve.port
     local = f"http://{host}:{port}"
@@ -237,7 +315,17 @@ def main() -> None:
 
     tunnel = None
     public = ""
-    if not args.no_tunnel:
+    if not args.no_tunnel and args.tunnel == "ngrok":
+        print(f"Opening ngrok on {backend_url} ...")
+        t0 = time.time()
+        tunnel = open_ngrok(port, backend_url, cfg.serve.get("ngrok_path") or "")
+        public = backend_url
+        deadline = time.time() + 30
+        while time.time() < deadline and not ngrok_answering(public):
+            time.sleep(1)
+        print(f"  ngrok answering  +{time.time() - t0:.0f} s" if ngrok_answering(public)
+              else "  warning: ngrok not answering yet")
+    elif not args.no_tunnel:
         print("Opening public tunnel ...")
         t0 = time.time()
         tunnel, public = open_tunnel(port)
@@ -255,23 +343,39 @@ def main() -> None:
     bar = "=" * 72
     print(f"\n{bar}\n  LIVE  -  Animesh Gupta  -  Panel Number: 0696\n{bar}")
     print(f"  Local dashboard  : {local}")
+    permanent = args.tunnel == "ngrok" and public == backend_url
     if public:
         print(f"  Public backend   : {public}")
         print(f"  Public dashboard : {public}        (served by this machine)")
+        # A permanent backend is built into frontend_deploy/, so the Netlify
+        # link needs nothing appended; a quick tunnel has to travel as ?api=.
+        link = frontend if permanent else f"{frontend}/?api={public}"
         if frontend:
-            print(f"\n  SHARE THIS LINK  : {frontend}/?api={public}")
+            print(f"\n  SHARE THIS LINK  : {link}")
         else:
-            print("\n  Netlify link     : <your-site>.netlify.app/?api=" + public)
+            print(f"\n  Netlify link     : <your-site>.netlify.app"
+                  f"{'' if permanent else '/?api=' + public}")
             print("                     (set serve.frontend_url in configs/default.yaml"
                   " to print it in full)")
     print(f"{bar}\n  Keep this window open during the demo. Ctrl+C to stop.\n")
 
     try:
+        last_check = time.time()
         while True:
             time.sleep(1)
             if tunnel is not None and tunnel.poll() is not None:
-                print("cloudflared exited - the public link is down. Restart this script.")
+                print(f"{args.tunnel} exited - the public link is down.")
                 tunnel = None
+            # With ngrok, keep the fixed address alive: if the ngrok we reused
+            # (or our own) goes away, start a fresh one on the same domain.
+            if permanent and tunnel is None and time.time() - last_check > 20:
+                last_check = time.time()
+                if not ngrok_answering(public):
+                    print("  ngrok is not answering - restarting it ...")
+                    try:
+                        tunnel = open_ngrok(port, public, cfg.serve.get("ngrok_path") or "")
+                    except SystemExit as exc:
+                        print(f"  {exc}")
     except KeyboardInterrupt:
         print("\nShutting down ...")
     finally:

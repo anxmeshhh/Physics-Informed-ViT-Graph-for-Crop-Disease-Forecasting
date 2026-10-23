@@ -22,6 +22,11 @@ from pathlib import Path
 
 import requests
 
+# ngrok's free plan answers browsers with a warning page unless this header is
+# sent; the dashboard sends it, and so does every request the audit makes.
+http = requests.Session()
+http.headers["ngrok-skip-browser-warning"] = "1"
+
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
 sys.path.insert(0, str(ROOT / "src"))
@@ -52,7 +57,7 @@ def predict(base: str, path: str, row, stream: bool) -> dict:
     with open(TESTS / row.file, "rb") as fh:
         files = {"image": (row.file, fh, "image/jpeg")}
         data = {"site_id": row.suggested_site_id, "date": row.suggested_date}
-        r = requests.post(f"{base}{path}", files=files, data=data, timeout=60)
+        r = http.post(f"{base}{path}", files=files, data=data, timeout=60)
     r.raise_for_status()
     if not stream:
         return r.json()
@@ -74,7 +79,7 @@ def main() -> None:
     thresholds = json.loads((Path(cfg.paths.processed) / "risk_thresholds.json").read_text())
     index = pd.read_csv(TESTS / "index.csv")
     a = Audit()
-    get = lambda p, **kw: requests.get(f"{base}{p}", params=kw, timeout=90)
+    get = lambda p, **kw: http.get(f"{base}{p}", params=kw, timeout=90)
 
     health = get("/api/health").json()
     print(f"Auditing {len(index)} demo leaves against {base}  (api_level {health.get('api_level')})\n")
@@ -106,7 +111,7 @@ def main() -> None:
 
         # --- stating the crop must not change an in-season answer ----------------
         with open(TESTS / row.file, "rb") as fh:
-            stated = requests.post(f"{base}/api/predict", timeout=60,
+            stated = http.post(f"{base}/api/predict", timeout=60,
                                    files={"image": (row.file, fh, "image/jpeg")},
                                    data={"site_id": row.suggested_site_id,
                                          "date": row.suggested_date, "crop": row.crop}).json()

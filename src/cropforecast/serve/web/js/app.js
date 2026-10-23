@@ -20,6 +20,21 @@ const API_KEY = "cropcast.api";
 const API_LEVEL = 4;            // the server this page needs; see api.py
 let API = "";
 const api = (path) => API + path;
+
+/* ngrok's free plan answers a browser with a "you are about to visit" page
+   instead of the API, unless the request carries this header. Only sent to
+   ngrok hosts: on any other origin a custom header would add a CORS
+   preflight to every call for nothing. */
+const NGROK_HOST = /\.ngrok(-free)?\.(app|dev|io)$/;
+function apiFetch(path, opts = {}) {
+  const url = api(path);
+  let host = "";
+  try { host = new URL(url, location.href).hostname; } catch { /* relative */ }
+  if (NGROK_HOST.test(host)) {
+    opts = { ...opts, headers: { ...(opts.headers || {}), "ngrok-skip-browser-warning": "1" } };
+  }
+  return fetch(url, opts);
+}
 const cleanUrl = (u) => (u || "").trim().replace(/\/+$/, "");
 
 async function connect() {
@@ -29,7 +44,15 @@ async function connect() {
     try { localStorage.setItem(API_KEY, fromQuery); } catch { /* private mode */ }
     return getJSON("/api/health");
   }
-  try { return await getJSON("/api/health"); } catch { /* not served by the API */ }
+  // Only a static deploy has an address built in (the copy FastAPI serves has
+  // none), so when there is one it is tried first - asking the static host for
+  // /api would only cost a 404 on every load. Both come before anything
+  // remembered, so a stale tunnel from an earlier visit can never shadow them.
+  const builtIn = cleanUrl(window.CROPCAST_API);
+  for (const base of builtIn ? [builtIn, ""] : [""]) {
+    API = base;
+    try { return await getJSON("/api/health"); } catch { /* try the next */ }
+  }
   let saved = "";
   try { saved = cleanUrl(localStorage.getItem(API_KEY)); } catch { /* private mode */ }
   if (!saved) throw new Error("no backend configured");
@@ -39,7 +62,7 @@ async function connect() {
 
 /* ------------------------------------------------------------------ utils */
 async function getJSON(url) {
-  const res = await fetch(api(url));
+  const res = await apiFetch(url);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.detail || `${res.status} ${res.statusText}`);
   return body;
@@ -234,7 +257,7 @@ $("sampleBtn").addEventListener("click", async () => {
     sampleIdx = (sampleIdx + 1) % samples.length;
     const s = samples[sampleIdx];
 
-    const res = await fetch(api(`/api/samples/${encodeURIComponent(s.file)}`));
+    const res = await apiFetch(`/api/samples/${encodeURIComponent(s.file)}`);
     if (!res.ok) throw new Error(`Could not load ${s.file}`);
     const blob = await res.blob();
     setFile(new File([blob], s.file, { type: blob.type || "image/jpeg" }));
@@ -292,7 +315,7 @@ async function runPredict() {
   if ($("cropSelect").value) fd.append("crop", $("cropSelect").value);
 
   try {
-    const res = await fetch(api("/api/predict/stream"), { method: "POST", body: fd });
+    const res = await apiFetch("/api/predict/stream", { method: "POST", body: fd });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));
       throw new Error(body.detail || "Prediction failed");
@@ -1439,12 +1462,12 @@ async function playHow() {
   howIdx = (howIdx + 1) % samples.length;
   const s = samples[howIdx];
   try {
-    const blob = await (await fetch(api(`/api/samples/${encodeURIComponent(s.file)}`))).blob();
+    const blob = await (await apiFetch(`/api/samples/${encodeURIComponent(s.file)}`)).blob();
     const fd = new FormData();
     fd.append("image", new File([blob], s.file, { type: blob.type || "image/jpeg" }));
     fd.append("site_id", s.site_id);
     fd.append("date", s.date);
-    const res = await fetch(api("/api/predict/stream"), { method: "POST", body: fd });
+    const res = await apiFetch("/api/predict/stream", { method: "POST", body: fd });
     if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "The pipeline did not run");
     const msgs = (await res.text()).split("\n").filter(Boolean).map((l) => JSON.parse(l));
     const err = msgs.find((m) => m.type === "error");

@@ -109,5 +109,14 @@ training:
 serve:
   host: "127.0.0.1"
   port: 8000
-  # Netlify URL of the static frontend; scripts/09_go_live.py appends ?api=<tunnel>.
+  # How 09_go_live.py makes this machine reachable:
+  #   ngrok      - the fixed address below, the same every launch (free ngrok account)
+  #   cloudflare - a Cloudflare quick tunnel, a new random address every launch (no account)
+  tunnel: ngrok
+  # Permanent public address of this machine's API (the ngrok static domain).
+  # 11_build_frontend.py writes it into frontend_deploy/, so the Netlify page
+  # finds the backend with no ?api= in the link.
+  backend_url: "https://gustless-bryant-unauthoritative.ngrok-free.dev"
+  ngrok_path: ""              # blank = look on PATH, then on the Desktop
+  # Netlify URL of the static frontend, printed as the link to share.
   frontend_url: ""
